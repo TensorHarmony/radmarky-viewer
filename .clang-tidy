@@ -1,0 +1,52 @@
+---
+# High-signal checks for RadMarky Viewer. Style-only and third-party noise is
+# left out so new defects stay visible. Run via tools/run-clang-tidy.ps1.
+Checks: >
+  -*,
+  clang-analyzer-core*,
+  clang-analyzer-cplusplus*,
+  clang-analyzer-deadcode*,
+  clang-analyzer-nullability*,
+  clang-analyzer-security*,
+  clang-analyzer-optin.cplusplus.UninitializedObject,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-implicit-widening-of-multiplication-result,
+  -bugprone-narrowing-conversions,
+  # Pimpl + std::optional guards are not tracked through unique_ptr members.
+  -bugprone-unchecked-optional-access,
+  performance-*,
+  -performance-avoid-endl,
+  -performance-enum-size,
+  -performance-no-int-to-ptr,
+  modernize-avoid-bind,
+  modernize-deprecated-headers,
+  modernize-loop-convert,
+  modernize-use-emplace,
+  modernize-use-equals-default,
+  modernize-use-equals-delete,
+  modernize-use-nullptr,
+  modernize-use-override,
+  modernize-use-using,
+  readability-container-size-empty,
+  readability-delete-null-pointer,
+  readability-make-member-function-const,
+  readability-misleading-indentation,
+  readability-redundant-control-flow,
+  readability-simplify-boolean-expr,
+  readability-uniqueptr-delete-release,
+  misc-redundant-expression,
+  misc-throw-by-value-catch-by-reference,
+  misc-unused-using-decls,
+  cert-err60-cpp,
+  cert-mem57-cpp
+
+WarningsAsErrors: ''
+HeaderFilterRegex: '(src|tests)[/\\]'
+FormatStyle: none
+InheritParentConfig: false
+UseColor: false
+
+CheckOptions:
+  bugprone-exception-escape.IgnoredExceptions: ''
+  performance-unnecessary-value-param.AllowedTypes: 'QString;QStringList;QByteArray'

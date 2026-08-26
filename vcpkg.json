@@ -1,0 +1,50 @@
+{
+  "name": "radmarky-viewer",
+  "version-string": "1.0.0-rc.1",
+  "description": "A lightweight Qt, ITK, and VTK medical imaging viewer",
+  "builtin-baseline": "f007e903c40c3c2731211c1691a0b115faba224e",
+  "dependencies": [
+    {
+      "name": "libarchive",
+      "default-features": false
+    },
+    {
+      "name": "giflib",
+      "default-features": false
+    },
+    {
+      "name": "ffmpeg",
+      "default-features": false,
+      "features": [
+        "avcodec",
+        "avformat",
+        "swscale",
+        "x264"
+      ]
+    },
+    {
+      "name": "itk",
+      "default-features": false
+    },
+    {
+      "name": "qtbase",
+      "default-features": false,
+      "features": [
+        "gui",
+        "opengl",
+        "widgets"
+      ]
+    },
+    {
+      "name": "qtsvg",
+      "default-features": false
+    },
+    {
+      "name": "vtk",
+      "default-features": false,
+      "features": [
+        "qt"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+/build/
+/out/
+/vcpkg_installed/
+/.vs/
+/.vscode/
+/.cursor/
+
+*.user
+*.suo
+*.VC.db
+*.VC.VC.opendb
+

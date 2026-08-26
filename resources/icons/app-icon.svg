@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1024"
+     height="1024"
+     viewBox="0 0 1024 1024"
+     role="img"
+     aria-labelledby="title desc">
+  <title id="title">RadMarky Viewer icon</title>
+  <desc id="desc">Magnifying-glass icon with contour annotation, crosshair, and central plus sign.</desc>
+
+  <defs>
+    <radialGradient id="bg" gradientUnits="userSpaceOnUse" cx="512" cy="390" r="760">
+      <stop offset="0" stop-color="#12355f"/>
+      <stop offset="0.50" stop-color="#061a33"/>
+      <stop offset="1" stop-color="#010b1b"/>
+    </radialGradient>
+
+    <linearGradient id="pinFill" gradientUnits="userSpaceOnUse" x1="300" y1="160" x2="720" y2="742">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.50" stop-color="#eef5ff"/>
+      <stop offset="1" stop-color="#b6cdee"/>
+    </linearGradient>
+
+    <linearGradient id="cyan" gradientUnits="userSpaceOnUse" x1="390" y1="320" x2="650" y2="560">
+      <stop offset="0" stop-color="#7eefff"/>
+      <stop offset="1" stop-color="#23c3ea"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect x="0" y="0" width="1024" height="1024" rx="200" ry="200" fill="url(#bg)"/>
+
+  <!-- Symbol, scaled 10% and centered on the canvas -->
+  <g transform="translate(512 512) scale(1.1) translate(-512 -430)">
+    <!-- Soft shadow -->
+    <g fill="#000817" opacity="0.22" transform="translate(0 14)">
+      <circle cx="512" cy="430" r="312"/>
+      <path d="M724 642 L814 732" stroke="#000817" stroke-width="76" stroke-linecap="butt"/>
+    </g>
+
+    <!-- Magnifying-glass handle (behind the ring so the rim stays circular) -->
+    <path d="M724 642 L814 732"
+          fill="none"
+          stroke="url(#pinFill)"
+          stroke-width="76"
+          stroke-linecap="butt"/>
+
+    <!-- Circular ring -->
+    <circle cx="512" cy="430" r="312" fill="url(#pinFill)"/>
+
+    <!-- Inner dark circular area -->
+    <circle cx="512" cy="430" r="259" fill="#0d2b55"/>
+
+    <!-- Contour fill -->
+    <path d="
+        M425 360
+        C458 327 507 324 550 344
+        C584 360 608 388 637 411
+        C666 435 669 473 650 501
+        C626 535 587 557 544 556
+        C503 555 480 535 448 523
+        C413 510 389 482 391 443
+        C393 405 394 382 425 360
+        Z"
+        fill="#35caef"
+        fill-opacity="0.12"/>
+
+    <!-- Contour stroke -->
+    <path d="
+        M425 360
+        C458 327 507 324 550 344
+        C584 360 608 388 637 411
+        C666 435 669 473 650 501
+        C626 535 587 557 544 556
+        C503 555 480 535 448 523
+        C413 510 389 482 391 443
+        C393 405 394 382 425 360
+        Z"
+        fill="none"
+        stroke="url(#cyan)"
+        stroke-width="28"
+        stroke-linecap="round"
+        stroke-linejoin="round"/>
+
+    <!-- Control points -->
+    <g fill="#ffffff" stroke="#0a2345" stroke-width="9">
+      <circle cx="425" cy="360" r="21"/>
+      <circle cx="600" cy="380" r="21"/>
+      <circle cx="594" cy="546" r="21"/>
+    </g>
+
+    <!-- Crosshair -->
+    <g stroke="#f8fbff" stroke-width="20" stroke-linecap="round" opacity="0.97">
+      <path d="M512 245 V324"/>
+      <path d="M512 536 V615"/>
+      <path d="M324 430 H403"/>
+      <path d="M621 430 H700"/>
+    </g>
+
+    <!-- Plus sign -->
+    <g stroke="#ffffff" stroke-width="20" stroke-linecap="round">
+      <path d="M512 397 V463"/>
+      <path d="M479 430 H545"/>
+    </g>
+  </g>
+</svg>

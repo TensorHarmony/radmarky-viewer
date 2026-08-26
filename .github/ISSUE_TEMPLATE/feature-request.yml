@@ -1,0 +1,50 @@
+name: Feature request
+description: Suggest a focused improvement to RadMarky Viewer
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Feature requests are welcome as issues. Please describe the user problem before the proposed implementation. Pull requests are limited to existing contributors or changes explicitly requested by a maintainer.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: Who needs this, and what are they unable to do today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the workflow and expected result.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Include current workarounds when applicable.
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Additional context
+      description: Add mockups or examples only when they contain synthetic or properly de-identified data.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I checked the README and roadmap for the current project scope.
+          required: true
+        - label: I searched existing issues for this request.
+          required: true
+        - label: This request contains no patient-identifiable medical data or protected health information.
+          required: true
