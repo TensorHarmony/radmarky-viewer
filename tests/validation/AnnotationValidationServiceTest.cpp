@@ -7,6 +7,7 @@
 #include <QFile>
 #include <QUuid>
 
+#include <atomic>
 #include <iostream>
 #include <memory>
 #include <filesystem>
@@ -124,6 +125,29 @@ int main(int argc, char* argv[])
     passed &= expect(manual.accepted() && !manual.saved, "manual validation does not save");
     auto empty = service.validateOnly(*annotation, {}, context);
     passed &= expect(empty.accepted() && empty.scripts.empty(), "empty set accepts");
+
+    const QString unvalidatedOutput =
+        QDir(directory).filePath(QStringLiteral("unvalidated.nii.gz"));
+    auto unvalidated = service.validateAndSave(
+        *annotation, unvalidatedOutput, {}, context);
+    passed &= expect(
+        unvalidated.accepted() && unvalidated.saved,
+        "save without validators succeeds");
+    passed &= expect(
+        QFileInfo::exists(unvalidatedOutput),
+        "save without validators writes destination");
+
+    const QString cancelledOutput =
+        QDir(directory).filePath(QStringLiteral("cancelled.nii.gz"));
+    std::atomic_bool cancellation{true};
+    auto cancelled = service.validateAndSave(
+        *annotation, cancelledOutput, {}, context, &cancellation);
+    passed &= expect(
+        cancelled.cancelled && !cancelled.saved,
+        "cancelled save without validators is not committed");
+    passed &= expect(
+        !QFileInfo::exists(cancelledOutput),
+        "cancelled save without validators leaves no destination");
     std::filesystem::remove_all(directoryPath);
     return passed ? 0 : 1;
 }

@@ -134,6 +134,9 @@ QProgressDialog#imageImportProgress { background: %16; color: %5; }
 QProgressDialog#imageImportProgress QLabel { color: %5; font-size: 13px; padding: 4px 2px; }
 QProgressDialog#imageImportProgress QProgressBar { min-height: 20px; border: 1px solid %7; border-radius: 4px; background: %4; color: %5; text-align: center; }
 QProgressDialog#imageImportProgress QProgressBar::chunk { background: %13; border-radius: 3px; }
+QDialog#annotationOperationProgress QLabel { color: %5; font-size: 13px; padding: 2px; }
+QDialog#annotationOperationProgress QProgressBar { min-height: 20px; border: 1px solid %7; border-radius: 4px; background: %4; color: %5; text-align: center; }
+QDialog#annotationOperationProgress QProgressBar::chunk { background: %13; border-radius: 3px; }
 QToolBar { border: 0; border-bottom: 1px solid %7; spacing: 3px; padding: 3px; }
 QToolBar QToolButton { min-width: 28px; min-height: 28px; border: 1px solid %7; border-top-color: %9; border-left-color: %9; border-bottom-color: %12; border-right-color: %12; border-radius: 3px; background: %8; color: %14; padding: 2px; }
 QToolBar QToolButton:hover { background: %9; border-color: %13; }

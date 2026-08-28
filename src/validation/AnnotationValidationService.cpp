@@ -275,6 +275,13 @@ AnnotationValidationResult AnnotationValidationService::run(
         return result;
     }
 
+    if(cancellation != nullptr
+       && cancellation->load(std::memory_order_relaxed))
+    {
+        result.cancelled = true;
+        return result;
+    }
+
     std::vector<app::ValidationScriptSetting> enabled;
     std::copy_if(
         scripts.begin(), scripts.end(), std::back_inserter(enabled),
@@ -325,6 +332,12 @@ AnnotationValidationResult AnnotationValidationService::run(
 
     if(finalizeSave && result.accepted())
     {
+        if(cancellation != nullptr
+           && cancellation->load(std::memory_order_relaxed))
+        {
+            result.cancelled = true;
+            return result;
+        }
         if(!copyAtomically(candidatePath, destinationPath, result.fatalError))
         {
             return result;

@@ -29,6 +29,7 @@
 #include <QDebug>
 #include <QDesktopServices>
 #include <QDialog>
+#include <QDialogButtonBox>
 #include <QDir>
 #include <QDockWidget>
 #include <QDragEnterEvent>
@@ -54,6 +55,7 @@
 #include <QMimeData>
 #include <QPlainTextEdit>
 #include <QProgressDialog>
+#include <QProgressBar>
 #include <QTextEdit>
 #include <QPointer>
 #include <QPixmap>
@@ -92,6 +94,120 @@ namespace
 {
 
 using ImportClock = std::chrono::steady_clock;
+
+class AnnotationOperationProgressDialog final : public QDialog
+{
+public:
+    AnnotationOperationProgressDialog(
+        const bool saving,
+        const int validationCount,
+        QWidget* const parent)
+        : QDialog(parent)
+    {
+        setObjectName(QStringLiteral("annotationOperationProgress"));
+        setWindowTitle(
+            saving
+                ? (validationCount > 0
+                       ? tr("Saving and Validating Annotation")
+                       : tr("Saving Annotation"))
+                : tr("Validating Annotation"));
+        setWindowModality(Qt::ApplicationModal);
+        setMinimumWidth(460);
+
+        auto* const layout = new QVBoxLayout(this);
+        layout->setContentsMargins(18, 16, 18, 14);
+        layout->setSpacing(8);
+
+        if(saving)
+        {
+            savingLabel_ = new QLabel(tr("Saving annotation…"), this);
+            savingLabel_->setObjectName(QStringLiteral("annotationSavingLabel"));
+            savingProgress_ = new QProgressBar(this);
+            savingProgress_->setObjectName(
+                QStringLiteral("annotationSavingProgressBar"));
+            savingProgress_->setAccessibleName(tr("Annotation saving progress"));
+            savingProgress_->setRange(0, 0);
+            savingProgress_->setTextVisible(false);
+            layout->addWidget(savingLabel_);
+            layout->addWidget(savingProgress_);
+        }
+
+        if(!saving || validationCount > 0)
+        {
+            validationLabel_ = new QLabel(
+                saving ? tr("Waiting to validate annotation…")
+                       : tr("Preparing annotation validation…"),
+                this);
+            validationLabel_->setObjectName(
+                QStringLiteral("annotationValidationLabel"));
+            validationProgress_ = new QProgressBar(this);
+            validationProgress_->setObjectName(
+                QStringLiteral("annotationValidationProgressBar"));
+            validationProgress_->setAccessibleName(
+                tr("Annotation validation progress"));
+            validationProgress_->setRange(0, std::max(1, validationCount));
+            validationProgress_->setValue(0);
+            validationProgress_->setFormat(tr("%v of %m validators completed"));
+            layout->addWidget(validationLabel_);
+            layout->addWidget(validationProgress_);
+        }
+
+        auto* const buttons = new QDialogButtonBox(
+            QDialogButtonBox::Cancel, Qt::Horizontal, this);
+        cancelButton_ = buttons->button(QDialogButtonBox::Cancel);
+        layout->addSpacing(4);
+        layout->addWidget(buttons);
+        connect(buttons, &QDialogButtonBox::rejected, this, [this] {
+            cancelButton_->setEnabled(false);
+            if(validationLabel_ != nullptr)
+            {
+                validationLabel_->setText(tr("Cancelling validation…"));
+            }
+            else if(savingLabel_ != nullptr)
+            {
+                savingLabel_->setText(tr("Cancelling save…"));
+            }
+        });
+    }
+
+    [[nodiscard]] QPushButton* cancelButton() const noexcept
+    {
+        return cancelButton_;
+    }
+
+    void beginValidation(
+        const int current,
+        const int total,
+        const QString& scriptName)
+    {
+        if(savingProgress_ != nullptr)
+        {
+            savingProgress_->setRange(0, 1);
+            savingProgress_->setValue(1);
+            savingProgress_->setTextVisible(true);
+            savingProgress_->setFormat(tr("Save prepared"));
+            savingLabel_->setText(tr("Annotation save prepared"));
+        }
+        if(validationProgress_ == nullptr)
+        {
+            return;
+        }
+        validationProgress_->setMaximum(std::max(1, total));
+        validationProgress_->setValue(std::max(0, current - 1));
+        validationLabel_->setText(
+            tr("Running %1 (%2 of %3)…")
+                .arg(scriptName)
+                .arg(current)
+                .arg(total));
+    }
+
+private:
+    QLabel* savingLabel_ = nullptr;
+    QProgressBar* savingProgress_ = nullptr;
+    QLabel* validationLabel_ = nullptr;
+    QProgressBar* validationProgress_ = nullptr;
+    QPushButton* cancelButton_ = nullptr;
+};
 
 double importElapsedMilliseconds(const ImportClock::time_point start)
 {
@@ -1556,26 +1672,17 @@ validation::AnnotationValidationResult MainWindow::runValidation(
     const int enabledCount = static_cast<int>(std::count_if(
         scripts.begin(), scripts.end(),
         [](const app::ValidationScriptSetting& script) { return script.enabled; }));
-    QProgressDialog progress(
-        tr("Preparing annotation validation…"),
-        tr("Cancel"),
-        0,
-        std::max(1, enabledCount),
-        this);
-    progress.setObjectName(QStringLiteral("annotationValidationProgress"));
-    progress.setWindowTitle(
-        finalizeSave ? tr("Validating Before Save") : tr("Validating Annotation"));
-    progress.setWindowModality(Qt::ApplicationModal);
-    progress.setMinimumDuration(0);
-    progress.setAutoClose(false);
-    progress.setAutoReset(false);
-    progress.setValue(0);
+    AnnotationOperationProgressDialog progress(
+        finalizeSave, enabledCount, this);
 
     std::atomic_bool cancellation{false};
-    connect(&progress, &QProgressDialog::canceled, this, [&cancellation] {
+    connect(progress.cancelButton(), &QPushButton::clicked, this, [&cancellation] {
         cancellation.store(true, std::memory_order_relaxed);
     });
-    QPointer<QProgressDialog> progressPointer(&progress);
+    connect(&progress, &QDialog::rejected, this, [&cancellation] {
+        cancellation.store(true, std::memory_order_relaxed);
+    });
+    QPointer<AnnotationOperationProgressDialog> progressPointer(&progress);
     auto progressCallback = [progressPointer](
                                 const int current,
                                 const int total,
@@ -1587,13 +1694,8 @@ validation::AnnotationValidationResult MainWindow::runValidation(
                 {
                     return;
                 }
-                progressPointer->setMaximum(std::max(1, total));
-                progressPointer->setValue(current - 1);
-                progressPointer->setLabelText(
-                    QObject::tr("Running %1 (%2 of %3)…")
-                        .arg(scriptName)
-                        .arg(current)
-                        .arg(total));
+                progressPointer->beginValidation(
+                    current, total, scriptName);
             },
             Qt::QueuedConnection);
     };
@@ -1636,7 +1738,7 @@ validation::AnnotationValidationResult MainWindow::runValidation(
         }));
     progress.show();
     loop.exec();
-    progress.close();
+    progress.accept();
     return watcher.result();
 }
 
@@ -1759,7 +1861,7 @@ bool MainWindow::saveAnnotationTo(
         if(result.cancelled)
         {
             statusBar()->showMessage(
-                tr("Save cancelled during annotation validation"), 5000);
+                tr("Annotation save cancelled"), 5000);
             return false;
         }
         if(!result.fatalError.isEmpty())
