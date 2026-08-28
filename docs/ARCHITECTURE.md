@@ -164,9 +164,11 @@ complete uniform stacks with different spacing and the boundary belongs to
 neither grid. This conservative rule keeps a stack with missing slices from
 being silently truncated into apparently valid pieces.
 
-The review dialog always presents one row per detected candidate, including its
-Series Description, comma-separated filenames, voxel resolution, measured slice
-spacing, and all detected consistency problems. Filenames are listed in the
+When discovery finds exactly one consistent candidate, it is imported
+automatically without showing the review dialog. Otherwise, the review dialog
+presents one row per detected candidate, including its Series Description,
+comma-separated filenames, voxel resolution, measured slice spacing, and all
+detected consistency problems. Filenames are listed in the
 same patient-position order used to load the slices, independent of input or
 drag order. Double-clicking the filenames cell copies the complete list to the
 clipboard; the Series Description and Series Instance UID cells can be copied

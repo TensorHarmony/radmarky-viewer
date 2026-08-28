@@ -73,6 +73,11 @@ struct DicomSeriesAnalysis
     // user to make the final choice.
     std::optional<std::string> proposedSeriesUid;
     std::vector<std::size_t> defaultSelection;
+
+    [[nodiscard]] bool canAutomaticallyImport() const noexcept
+    {
+        return series.size() == 1 && series.front().consistent();
+    }
 };
 
 [[nodiscard]] DicomSeriesAnalysis analyzeDicomSeries(

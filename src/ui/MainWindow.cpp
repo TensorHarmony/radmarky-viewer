@@ -2342,20 +2342,41 @@ void MainWindow::startDicomImport(
                         "No readable DICOM files with a Series Instance UID were found");
                 }
 
-                importProgress_->hide();
-                DicomSeriesDialog dialog(records, std::move(analysis), this);
-                if(dialog.exec() != QDialog::Accepted)
+                std::vector<io::DicomFileRecord> selectedRecords;
+                auto geometryPolicy = io::DicomReadGeometryPolicy::Strict;
+                if(analysis.canAutomaticallyImport())
                 {
-                    scanWatcher->deleteLater();
-                    finishImportProgress();
-                    statusBar()->showMessage(tr("DICOM import cancelled"), 5000);
-                    return;
+                    const auto& indices = analysis.series.front().recordIndices;
+                    selectedRecords.reserve(indices.size());
+                    for(const auto index : indices)
+                    {
+                        if(index >= records.size())
+                        {
+                            throw std::runtime_error(
+                                "DICOM series contains an invalid file index");
+                        }
+                        selectedRecords.push_back(records[index]);
+                    }
                 }
-                auto selectedRecords = dialog.selectedRecords();
-                const auto geometryPolicy =
-                    dialog.selectedSeriesRequiresSliceSpacingOverride()
-                    ? io::DicomReadGeometryPolicy::AllowSliceSpacingOverride
-                    : io::DicomReadGeometryPolicy::Strict;
+                else
+                {
+                    importProgress_->hide();
+                    DicomSeriesDialog dialog(records, std::move(analysis), this);
+                    if(dialog.exec() != QDialog::Accepted)
+                    {
+                        scanWatcher->deleteLater();
+                        finishImportProgress();
+                        statusBar()->showMessage(
+                            tr("DICOM import cancelled"), 5000);
+                        return;
+                    }
+                    selectedRecords = dialog.selectedRecords();
+                    geometryPolicy =
+                        dialog.selectedSeriesRequiresSliceSpacingOverride()
+                        ? io::DicomReadGeometryPolicy::AllowSliceSpacingOverride
+                        : io::DicomReadGeometryPolicy::Strict;
+                    importProgress_->show();
+                }
                 QStringList loadedSourceFiles = sourceFiles;
                 if(std::any_of(
                        sourceFiles.begin(), sourceFiles.end(), [](const QString& path) {
@@ -2370,8 +2391,6 @@ void MainWindow::startDicomImport(
                         loadedSourceFiles.push_back(qtPath(record.filePath));
                     }
                 }
-                importProgress_->show();
-
                 updateImportProgress(
                     35,
                     tr("Loading %1 DICOM slices…").arg(selectedRecords.size()));

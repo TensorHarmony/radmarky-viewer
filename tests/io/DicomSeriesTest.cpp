@@ -106,6 +106,9 @@ int main()
         oneAnalysis.defaultSelection == std::vector<std::size_t>({0, 1, 2}),
         "one series default selection");
     passed &= expectTrue(
+        oneAnalysis.canAutomaticallyImport(),
+        "one consistent series can be imported without review");
+    passed &= expectTrue(
         isValidSingleSeriesSelection(oneSeries, {0, 2}),
         "subset of one series valid");
 
@@ -135,6 +138,9 @@ int main()
         oneSeries[0], oneSeries[1], oneSeries[2], secondUid, missingUid, unreadable};
     const auto mixedAnalysis = analyzeDicomSeries(mixed);
     passed &= expectTrue(mixedAnalysis.series.size() == 2, "UID groups detected");
+    passed &= expectFalse(
+        mixedAnalysis.canAutomaticallyImport(),
+        "multiple series require review");
     passed &= expectTrue(
         mixedAnalysis.ignoredIndices == std::vector<std::size_t>({4, 5}),
         "unassigned inputs reported");
@@ -227,6 +233,9 @@ int main()
     passed &= expectFalse(
         irregularSpacingAnalysis.proposedSeriesIndex.has_value(),
         "non-uniform spacing candidate is not selected by default");
+    passed &= expectFalse(
+        irregularSpacingAnalysis.canAutomaticallyImport(),
+        "overrideable non-uniform spacing requires review");
 
     const std::vector spacingMetadataMismatch{
         recordAt("d0", "9.9.9", 0.0, 80, std::nullopt, 2.0),
@@ -245,6 +254,9 @@ int main()
     passed &= expectFalse(
         spacingMetadataMismatchAnalysis.proposedSeriesIndex.has_value(),
         "spacing metadata disagreement is not selected by default");
+    passed &= expectFalse(
+        spacingMetadataMismatchAnalysis.canAutomaticallyImport(),
+        "overrideable spacing metadata mismatch requires review");
 
     auto inconsistent = oneSeries;
     inconsistent.push_back(recordAt("four", "1.2.3", 3.5, 40));
