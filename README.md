@@ -172,7 +172,9 @@ the active label. Missing files are reported rather than silently ignored.
   continuity checks.
 
 Validation scripts execute as separate processes with the current user's
-permissions; they are not sandboxed. Add only scripts you trust.
+permissions; they are not sandboxed. Add only scripts you trust. The validator
+contract and interpreter discovery are documented in
+[docs/VALIDATION.md](docs/VALIDATION.md).
 
 ### Export
 
@@ -280,8 +282,9 @@ resources/       Application artwork and bundled validation presets
 
 The current design is documented in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), prospective work is tracked in
-[docs/ROADMAP.md](docs/ROADMAP.md), and implementation rules are collected in
-[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+[docs/ROADMAP.md](docs/ROADMAP.md), implementation rules are collected in
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md), and the annotation validator
+contract is described in [docs/VALIDATION.md](docs/VALIDATION.md).
 
 ## Contributing
 

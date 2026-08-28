@@ -694,19 +694,25 @@ MainWindow::MainWindow(QWidget* parent)
     connect(
         validateAnnotationAction_, &QAction::triggered,
         this, &MainWindow::validateOpenAnnotation);
-    toolbar->addSeparator();
+    auto* const imageToolsToolbar = new QToolBar(tr("Image Tools"), this);
+    imageToolsToolbar->setObjectName(QStringLiteral("imageToolsToolbar"));
+    imageToolsToolbar->setMovable(true);
+    imageToolsToolbar->setFloatable(true);
+    imageToolsToolbar->setAllowedAreas(Qt::AllToolBarAreas);
+    imageToolsToolbar->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    addToolBar(Qt::TopToolBarArea, imageToolsToolbar);
 
     auto* const modeGroup = new QActionGroup(this);
     modeGroup->setExclusive(true);
-    auto* const crosshairAction = toolbar->addAction(
+    auto* const crosshairAction = imageToolsToolbar->addAction(
         svgIcon(QStringLiteral(":/icons/cursor.svg")), tr("Cursor"));
-    auto* const zoomAction = toolbar->addAction(
+    auto* const zoomAction = imageToolsToolbar->addAction(
         svgIcon(QStringLiteral(":/icons/zoom.svg")), tr("Zoom"));
-    auto* const panAction = toolbar->addAction(
+    auto* const panAction = imageToolsToolbar->addAction(
         svgIcon(QStringLiteral(":/icons/pan.svg")), tr("Pan"));
-    auto* const contrastAction = toolbar->addAction(
+    auto* const contrastAction = imageToolsToolbar->addAction(
         svgIcon(QStringLiteral(":/icons/contrast.svg")), tr("Contrast"));
-    measureAction_ = toolbar->addAction(
+    measureAction_ = imageToolsToolbar->addAction(
         svgIcon(QStringLiteral(":/icons/measure.svg")), tr("Measure"));
     for(auto* const action : {
             crosshairAction, zoomAction, panAction, contrastAction,
@@ -759,7 +765,7 @@ MainWindow::MainWindow(QWidget* parent)
     connect(
         invertAction_, &QAction::toggled,
         viewer_, &rendering::OrthogonalViewer::setInverted);
-    toolbar->addAction(invertAction_);
+    imageToolsToolbar->addAction(invertAction_);
 
     brushAction_ = new QAction(
         svgIcon(QStringLiteral(":/icons/brush.svg")), tr("Brush"), this);
@@ -794,10 +800,10 @@ MainWindow::MainWindow(QWidget* parent)
     connect(
         scopedEraseAction_, &QAction::triggered,
         viewer_, &rendering::OrthogonalViewer::setScopedEraseTool);
-    toolbar->addSeparator();
-    toolbar->addAction(brushAction_);
-    toolbar->addAction(eraseAction_);
-    toolbar->addAction(scopedEraseAction_);
+    imageToolsToolbar->addSeparator();
+    imageToolsToolbar->addAction(brushAction_);
+    imageToolsToolbar->addAction(eraseAction_);
+    imageToolsToolbar->addAction(scopedEraseAction_);
 
     undoEditAction_ = new QAction(
         svgIcon(QStringLiteral(":/icons/undo.svg")),
@@ -975,6 +981,7 @@ MainWindow::MainWindow(QWidget* parent)
     viewMenu->addAction(brushAction_);
     viewMenu->addAction(eraseAction_);
     viewMenu->addAction(scopedEraseAction_);
+    viewMenu->addAction(imageToolsToolbar->toggleViewAction());
     viewMenu->addSeparator();
     viewMenu->addAction(zoomInAction);
     viewMenu->addAction(zoomOutAction);
@@ -1031,9 +1038,12 @@ MainWindow::MainWindow(QWidget* parent)
                     ? tr("Keep RadMarky Viewer above other applications (on)")
                     : tr("Keep RadMarky Viewer above other applications"));
         });
-    for(auto* const button : toolbar->findChildren<QToolButton*>())
+    for(auto* const currentToolbar : {toolbar, imageToolsToolbar})
     {
-        button->setAutoRaise(false);
+        for(auto* const button : currentToolbar->findChildren<QToolButton*>())
+        {
+            button->setAutoRaise(false);
+        }
     }
 
     toolbox_ = new ViewerToolbox(this);
