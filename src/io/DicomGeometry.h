@@ -18,6 +18,7 @@ enum class DicomGeometryIssueKind
     InconsistentDimensions,
     InconsistentPixelSpacing,
     InconsistentSpacingMetadata,
+    SpacingMetadataMismatch,
     InconsistentFrameOfReference,
     DuplicateSlice,
     MissingSlices,
@@ -49,6 +50,19 @@ struct DicomGeometryAnalysis
         return diagnostics.size() == 1
             && diagnostics.front().kind
                 == DicomGeometryIssueKind::NonUniformSpacing;
+    }
+
+    [[nodiscard]] bool canOverrideSpacingMetadataMismatch() const noexcept
+    {
+        return diagnostics.size() == 1
+            && diagnostics.front().kind
+                == DicomGeometryIssueKind::SpacingMetadataMismatch;
+    }
+
+    [[nodiscard]] bool canOverrideSliceSpacing() const noexcept
+    {
+        return canOverrideNonUniformSpacing()
+            || canOverrideSpacingMetadataMismatch();
     }
 };
 

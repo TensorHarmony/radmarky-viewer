@@ -173,11 +173,13 @@ clipboard; the Series Description and Series Instance UID cells can be copied
 the same way. Unreadable files and DICOM objects without a Series Instance UID
 are listed as ignored; candidates not chosen by the user are left behind.
 Inconsistent candidates remain visible for diagnosis and cannot normally be
-selected. The sole exception is a candidate whose only problem is non-uniform
-distance between otherwise collinear slice positions. It remains unselected by
-default, is shown as a warning, and can be imported only after an explicit
-confirmation. The resulting ITK volume has one uniform slice-axis spacing, so
-that override cannot preserve every original slice position exactly.
+selected. An explicit override is available when the candidate's only problem
+is either non-uniform distance between otherwise collinear slice positions, or
+a uniform position-derived spacing that disagrees with the declared Spacing
+Between Slices value. Such candidates remain unselected by default, are shown
+as warnings, and can be imported only after confirmation. A non-uniform stack
+is represented by an ITK volume with one uniform slice-axis spacing, so that
+override cannot preserve every original slice position exactly.
 
 Classic multi-file DICOM stacks are ordered by Image Position (Patient)
 projected onto the normal formed from Image Orientation (Patient). A stack must
@@ -189,7 +191,9 @@ The importer rejects:
 - missing or invalid spatial metadata
 - changing in-plane direction cosines
 - changing dimensions or pixel spacing
-- inconsistent spacing metadata
+- changing, invalid, or partially missing spacing metadata; a sole disagreement
+  between declared spacing and otherwise uniform slice positions can be imported
+  through the explicit override described above
 - mixed or partially missing Frame of Reference UIDs
 - duplicate SOP Instance UIDs or duplicate slice positions
 - gaps consistent with missing slices

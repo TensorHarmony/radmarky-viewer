@@ -215,6 +215,26 @@ int main()
             spacingMetadataAnalysis,
             DicomGeometryIssueKind::InconsistentSpacingMetadata),
         "inconsistent spacing metadata rejected");
+    passed &= expectTrue(
+        !spacingMetadataAnalysis.canOverrideSliceSpacing(),
+        "changing spacing metadata cannot be overridden");
+
+    auto spacingMetadataMismatch = shuffled;
+    for(auto& record : spacingMetadataMismatch)
+    {
+        record.spacingBetweenSlices = 3.0;
+    }
+    const auto spacingMetadataMismatchAnalysis =
+        radmarky::io::analyzeDicomGeometry(spacingMetadataMismatch);
+    passed &= expectTrue(
+        hasIssue(
+            spacingMetadataMismatchAnalysis,
+            DicomGeometryIssueKind::SpacingMetadataMismatch),
+        "declared and position-derived spacing disagreement detected");
+    passed &= expectTrue(
+        spacingMetadataMismatchAnalysis.canOverrideSpacingMetadataMismatch()
+            && spacingMetadataMismatchAnalysis.canOverrideSliceSpacing(),
+        "isolated spacing metadata and position disagreement can be overridden");
 
     auto inconsistentFrame = shuffled;
     inconsistentFrame[1].frameOfReferenceUid = "9.8.7.6";

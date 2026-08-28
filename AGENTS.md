@@ -129,6 +129,12 @@ A uniform gantry tilt is accepted and preserved. A single DICOM file is left
 to GDCM/ITK because it may be a valid multi-frame object whose per-frame
 geometry is stored in functional groups.
 
+The import dialog offers an explicit override when the only issue is either
+non-uniform distance between otherwise collinear slice positions or a uniform
+position-derived spacing that disagrees with the declared Spacing Between
+Slices value. Changing, invalid, or partially missing spacing metadata remains
+a hard rejection.
+
 ## Tests
 
 RadMarky's automated tests cover the fixed `RPS/AIR/RIP` mapping, known

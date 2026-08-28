@@ -444,7 +444,7 @@ DicomGeometryAnalysis analyzeDicomGeometry(
     {
         addDiagnostic(
             analysis,
-            DicomGeometryIssueKind::InconsistentSpacingMetadata,
+            DicomGeometryIssueKind::SpacingMetadataMismatch,
             "Spacing Between Slices disagrees with Image Position (Patient)");
     }
 

@@ -416,11 +416,39 @@ int main()
             {},
             {},
             nullptr,
-            radmarky::io::DicomReadGeometryPolicy::AllowNonUniformSliceSpacing);
+            radmarky::io::DicomReadGeometryPolicy::AllowSliceSpacingOverride);
         passed &= expectTrue(
             overriddenVolume->geometry().dimensions()
                 == radmarky::core::ImageGeometry::Dimensions{{4, 3, 12}},
             "explicit spacing override permits DICOM import");
+
+        auto spacingMetadataMismatchRecords = records;
+        for(auto& record : spacingMetadataMismatchRecords)
+        {
+            record.spacingBetweenSlices = 9.0;
+        }
+        const auto spacingMetadataMismatchGeometry =
+            radmarky::io::analyzeDicomGeometry(
+                spacingMetadataMismatchRecords);
+        passed &= expectTrue(
+            spacingMetadataMismatchGeometry.canOverrideSpacingMetadataMismatch(),
+            "reader fixture has overridable spacing metadata disagreement");
+        passed &= expectThrows(
+            [&] {
+                (void)radmarky::io::DicomReader::read(
+                    spacingMetadataMismatchRecords);
+            },
+            "strict reader rejects spacing metadata disagreement");
+        const auto metadataOverrideVolume = radmarky::io::DicomReader::read(
+            spacingMetadataMismatchRecords,
+            {},
+            {},
+            nullptr,
+            radmarky::io::DicomReadGeometryPolicy::AllowSliceSpacingOverride);
+        passed &= expectTrue(
+            metadataOverrideVolume->geometry().dimensions()
+                == radmarky::core::ImageGeometry::Dimensions{{4, 3, 12}},
+            "explicit override permits spacing metadata disagreement import");
 
         double previousProgress = 0.0;
         std::size_t progressUpdates = 0;

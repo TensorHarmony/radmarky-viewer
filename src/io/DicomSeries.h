@@ -48,6 +48,7 @@ struct DicomSeriesCandidate
     std::size_t partCount = 1;
     bool gantryTilt = false;
     bool nonUniformSpacingOverrideAllowed = false;
+    bool spacingMetadataMismatchOverrideAllowed = false;
 
     [[nodiscard]] bool consistent() const noexcept
     {
@@ -56,7 +57,8 @@ struct DicomSeriesCandidate
 
     [[nodiscard]] bool importable() const noexcept
     {
-        return consistent() || nonUniformSpacingOverrideAllowed;
+        return consistent() || nonUniformSpacingOverrideAllowed
+            || spacingMetadataMismatchOverrideAllowed;
     }
 };
 

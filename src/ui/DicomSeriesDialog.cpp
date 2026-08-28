@@ -144,6 +144,12 @@ public:
                 {
                     return tr("Warning: non-uniform spacing (override available)");
                 }
+                if(candidate.spacingMetadataMismatchOverrideAllowed)
+                {
+                    return tr(
+                        "Warning: declared spacing disagrees with slice positions "
+                        "(override available)");
+                }
                 return candidate.consistent()
                     ? (candidate.gantryTilt ? tr("Consistent (gantry tilt)")
                                             : tr("Consistent"))
@@ -177,7 +183,8 @@ public:
         }
         if(role == Qt::ForegroundRole && index.column() == 6)
         {
-            if(candidate.nonUniformSpacingOverrideAllowed)
+            if(candidate.nonUniformSpacingOverrideAllowed
+               || candidate.spacingMetadataMismatchOverrideAllowed)
             {
                 return QColor(176, 101, 0);
             }
@@ -295,8 +302,9 @@ DicomSeriesDialog::DicomSeriesDialog(
         tr("The DICOM input has been separated into candidate image stacks. "
            "Review their resolution, measured slice spacing, and consistency, "
            "then select one series to import. A series with only non-uniform slice "
-           "spacing can be imported with confirmation; other inconsistent rows "
-           "cannot be imported."),
+           "spacing, or only a disagreement between declared spacing and uniform "
+           "slice positions, can be imported with confirmation; other inconsistent "
+           "rows cannot be imported."),
         this);
     explanation->setWordWrap(true);
     layout->addWidget(explanation);
@@ -392,6 +400,23 @@ DicomSeriesDialog::DicomSeriesDialog(
                 return;
             }
         }
+        else if(selectedSeriesRequiresSpacingMetadataMismatchOverride())
+        {
+            const auto answer = QMessageBox::warning(
+                this,
+                tr("Import Conflicting Slice Spacing?"),
+                tr("The DICOM Spacing Between Slices metadata disagrees with the "
+                   "spacing calculated from Image Position (Patient). The image "
+                   "positions themselves are uniformly spaced, so RadMarky can use "
+                   "their measured geometry despite the conflicting declared "
+                   "spacing.\n\nImport this series anyway?"),
+                QMessageBox::Yes | QMessageBox::No,
+                QMessageBox::No);
+            if(answer != QMessageBox::Yes)
+            {
+                return;
+            }
+        }
         accept();
     });
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -442,6 +467,19 @@ bool DicomSeriesDialog::selectedSeriesRequiresNonUniformSpacingOverride() const
     const auto selected = selectedSeriesIndex();
     return selected && *selected < analysis_.series.size()
         && analysis_.series[*selected].nonUniformSpacingOverrideAllowed;
+}
+
+bool DicomSeriesDialog::selectedSeriesRequiresSpacingMetadataMismatchOverride() const
+{
+    const auto selected = selectedSeriesIndex();
+    return selected && *selected < analysis_.series.size()
+        && analysis_.series[*selected].spacingMetadataMismatchOverrideAllowed;
+}
+
+bool DicomSeriesDialog::selectedSeriesRequiresSliceSpacingOverride() const
+{
+    return selectedSeriesRequiresNonUniformSpacingOverride()
+        || selectedSeriesRequiresSpacingMetadataMismatchOverride();
 }
 
 std::optional<std::size_t> DicomSeriesDialog::selectedSeriesIndex() const

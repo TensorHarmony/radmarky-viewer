@@ -228,6 +228,24 @@ int main()
         irregularSpacingAnalysis.proposedSeriesIndex.has_value(),
         "non-uniform spacing candidate is not selected by default");
 
+    const std::vector spacingMetadataMismatch{
+        recordAt("d0", "9.9.9", 0.0, 80, std::nullopt, 2.0),
+        recordAt("d1", "9.9.9", 1.0, 81, std::nullopt, 2.0),
+        recordAt("d2", "9.9.9", 2.0, 82, std::nullopt, 2.0),
+    };
+    const auto spacingMetadataMismatchAnalysis =
+        analyzeDicomSeries(spacingMetadataMismatch);
+    passed &= expectTrue(
+        spacingMetadataMismatchAnalysis.series.size() == 1
+            && !spacingMetadataMismatchAnalysis.series.front().consistent()
+            && spacingMetadataMismatchAnalysis.series.front()
+                   .spacingMetadataMismatchOverrideAllowed
+            && spacingMetadataMismatchAnalysis.series.front().importable(),
+        "declared and position-derived spacing disagreement allows manual override");
+    passed &= expectFalse(
+        spacingMetadataMismatchAnalysis.proposedSeriesIndex.has_value(),
+        "spacing metadata disagreement is not selected by default");
+
     auto inconsistent = oneSeries;
     inconsistent.push_back(recordAt("four", "1.2.3", 3.5, 40));
     inconsistent[1].columns = 65;

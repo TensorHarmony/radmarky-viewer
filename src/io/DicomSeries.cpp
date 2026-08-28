@@ -83,6 +83,8 @@ DicomSeriesCandidate makeCandidate(
     candidate.gantryTilt = geometry.gantryTilt;
     candidate.nonUniformSpacingOverrideAllowed =
         geometry.canOverrideNonUniformSpacing();
+    candidate.spacingMetadataMismatchOverrideAllowed =
+        geometry.canOverrideSpacingMetadataMismatch();
     candidate.consistencyIssues.reserve(geometry.diagnostics.size());
     for(const auto& diagnostic : geometry.diagnostics)
     {

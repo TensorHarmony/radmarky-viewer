@@ -407,10 +407,10 @@ std::vector<std::string> orderedFileNames(
     const DicomReadGeometryPolicy geometryPolicy)
 {
     const auto geometry = analyzeDicomGeometry(records);
-    const bool overrideNonUniformSpacing = geometryPolicy
-            == DicomReadGeometryPolicy::AllowNonUniformSliceSpacing
-        && geometry.canOverrideNonUniformSpacing();
-    if(!geometry.valid() && !overrideNonUniformSpacing)
+    const bool overrideSliceSpacing = geometryPolicy
+            == DicomReadGeometryPolicy::AllowSliceSpacingOverride
+        && geometry.canOverrideSliceSpacing();
+    if(!geometry.valid() && !overrideSliceSpacing)
     {
         throw std::runtime_error(
             "DICOM geometry validation failed: "

@@ -217,5 +217,58 @@ int main(int argc, char* argv[])
             "spacing override candidate can be selected manually");
     }
 
+    std::vector<radmarky::io::DicomFileRecord> metadataMismatch{
+        recordAt(30, "9.9.9", "Conflicting spacing metadata", 0.0),
+        recordAt(31, "9.9.9", "Conflicting spacing metadata", 1.0),
+        recordAt(32, "9.9.9", "Conflicting spacing metadata", 2.0),
+    };
+    for(auto& record : metadataMismatch)
+    {
+        record.spacingBetweenSlices = 2.0;
+    }
+    radmarky::ui::DicomSeriesDialog metadataOverrideDialog(metadataMismatch);
+    auto* const metadataOverrideTable =
+        metadataOverrideDialog.findChild<QTableView*>(
+            QStringLiteral("dicomSeriesTable"));
+    auto* const metadataOverrideButtons =
+        metadataOverrideDialog.findChild<QDialogButtonBox*>();
+    passed &= expectTrue(
+        metadataOverrideTable != nullptr && metadataOverrideButtons != nullptr,
+        "spacing metadata override controls exist");
+    if(metadataOverrideTable != nullptr && metadataOverrideButtons != nullptr)
+    {
+        auto* const metadataOverrideModel = metadataOverrideTable->model();
+        passed &= expectTrue(
+            metadataOverrideModel
+                    ->data(
+                        metadataOverrideModel->index(0, 6), Qt::DisplayRole)
+                    .toString()
+                == QStringLiteral(
+                    "Warning: declared spacing disagrees with slice positions "
+                    "(override available)"),
+            "spacing metadata override warning shown");
+        passed &= expectTrue(
+            metadataOverrideModel
+                    ->data(
+                        metadataOverrideModel->index(0, 0), Qt::CheckStateRole)
+                    .toInt()
+                    == Qt::Unchecked
+                && !metadataOverrideButtons->button(QDialogButtonBox::Ok)
+                        ->isEnabled(),
+            "spacing metadata override candidate is not selected by default");
+        passed &= expectTrue(
+            metadataOverrideModel->setData(
+                metadataOverrideModel->index(0, 0),
+                Qt::Checked,
+                Qt::CheckStateRole)
+                && metadataOverrideButtons->button(QDialogButtonBox::Ok)
+                       ->isEnabled()
+                && metadataOverrideDialog
+                       .selectedSeriesRequiresSpacingMetadataMismatchOverride()
+                && metadataOverrideDialog
+                       .selectedSeriesRequiresSliceSpacingOverride(),
+            "spacing metadata disagreement can be selected manually");
+    }
+
     return passed ? 0 : 1;
 }

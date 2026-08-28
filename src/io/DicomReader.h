@@ -28,7 +28,7 @@ struct DicomReadTimings
 enum class DicomReadGeometryPolicy
 {
     Strict,
-    AllowNonUniformSliceSpacing,
+    AllowSliceSpacingOverride,
 };
 
 class DicomReader

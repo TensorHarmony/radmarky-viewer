@@ -32,7 +32,9 @@ public:
 
     [[nodiscard]] std::vector<std::filesystem::path> selectedFilePaths() const;
     [[nodiscard]] std::vector<io::DicomFileRecord> selectedRecords() const;
+    [[nodiscard]] bool selectedSeriesRequiresSliceSpacingOverride() const;
     [[nodiscard]] bool selectedSeriesRequiresNonUniformSpacingOverride() const;
+    [[nodiscard]] bool selectedSeriesRequiresSpacingMetadataMismatchOverride() const;
 
 private:
     [[nodiscard]] std::optional<std::size_t> selectedSeriesIndex() const;

@@ -2353,8 +2353,8 @@ void MainWindow::startDicomImport(
                 }
                 auto selectedRecords = dialog.selectedRecords();
                 const auto geometryPolicy =
-                    dialog.selectedSeriesRequiresNonUniformSpacingOverride()
-                    ? io::DicomReadGeometryPolicy::AllowNonUniformSliceSpacing
+                    dialog.selectedSeriesRequiresSliceSpacingOverride()
+                    ? io::DicomReadGeometryPolicy::AllowSliceSpacingOverride
                     : io::DicomReadGeometryPolicy::Strict;
                 QStringList loadedSourceFiles = sourceFiles;
                 if(std::any_of(
