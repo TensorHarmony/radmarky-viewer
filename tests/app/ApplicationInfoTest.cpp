@@ -36,10 +36,10 @@ int main()
         "Copyright © 2026 TensorHarmony Technologies Inc.",
         "copyright notice");
     const bool versionIsCorrect = expectEqual(
-        radmarky::app::applicationVersion(), "1.0.0-rc.1", "application version");
+        radmarky::app::applicationVersion(), "1.0.0-rc.2", "application version");
     const bool releaseDateIsCorrect = expectEqual(
         radmarky::app::applicationReleaseDate(),
-        "August 24, 2026",
+        "August 29, 2026",
         "application release date");
 
     return nameIsCorrect && copyrightHolderIsCorrect && copyrightNoticeIsCorrect

@@ -1,6 +1,6 @@
 {
   "name": "radmarky-viewer",
-  "version-string": "1.0.0-rc.1",
+  "version-string": "1.0.0-rc.2",
   "description": "A lightweight Qt, ITK, and VTK medical imaging viewer",
   "builtin-baseline": "f007e903c40c3c2731211c1691a0b115faba224e",
   "dependencies": [

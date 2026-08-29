@@ -13,7 +13,7 @@ diagnosis or treatment.
 ## Download
 
 **Latest release candidate:**
-[RadMarky Viewer 1.0.0-rc.1 for Windows x64](https://github.com/TensorHarmony/radmarky-viewer/releases/tag/v1.0.0-rc.1)
+[RadMarky Viewer 1.0.0-rc.2 for Windows x64](https://github.com/TensorHarmony/radmarky-viewer/releases/tag/v1.0.0-rc.2)
 
 This is a prerelease intended for testing and evaluation. Please report
 problems through [GitHub Issues](https://github.com/TensorHarmony/radmarky-viewer/issues).
