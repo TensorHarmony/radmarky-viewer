@@ -184,6 +184,8 @@ qt_add_executable(radmarky_viewer WIN32 MACOSX_BUNDLE
     src/ui/MainWindow.h
     src/ui/AboutDialog.cpp
     src/ui/AboutDialog.h
+    src/ui/ShortcutsDialog.cpp
+    src/ui/ShortcutsDialog.h
     src/ui/DicomSeriesDialog.cpp
     src/ui/DicomSeriesDialog.h
     src/ui/DicomHeaderDialog.cpp

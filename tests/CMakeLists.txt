@@ -95,6 +95,14 @@ target_include_directories(radmarky_about_dialog_tests PRIVATE ../src)
 target_link_libraries(
     radmarky_about_dialog_tests PRIVATE radmarky_app_info Qt6::Widgets)
 
+add_executable(radmarky_shortcuts_dialog_tests
+    ui/ShortcutsDialogTest.cpp
+    ../src/ui/ShortcutsDialog.cpp
+    ../src/ui/ShortcutsDialog.h
+)
+target_include_directories(radmarky_shortcuts_dialog_tests PRIVATE ../src)
+target_link_libraries(radmarky_shortcuts_dialog_tests PRIVATE Qt6::Widgets)
+
 add_executable(radmarky_dicom_header_dialog_tests
     ui/DicomHeaderDialogTest.cpp
     ../src/ui/DicomHeaderDialog.cpp
@@ -162,6 +170,7 @@ target_link_libraries(
     radmarky_validation Qt6::Core)
 
 radmarky_setup_qt_runtime(radmarky_about_dialog_tests)
+radmarky_setup_qt_runtime(radmarky_shortcuts_dialog_tests)
 radmarky_setup_qt_runtime(radmarky_dicom_header_dialog_tests)
 radmarky_setup_qt_runtime(radmarky_dicom_series_dialog_tests)
 radmarky_setup_qt_runtime(radmarky_gif_export_tests)
@@ -191,6 +200,8 @@ if(MSVC)
     target_compile_options(radmarky_dicom_reader_tests PRIVATE /W4 /permissive-)
     target_compile_options(radmarky_dicom_performance PRIVATE /W4 /permissive-)
     target_compile_options(radmarky_about_dialog_tests PRIVATE /W4 /permissive-)
+    target_compile_options(
+        radmarky_shortcuts_dialog_tests PRIVATE /W4 /permissive-)
     target_compile_options(
         radmarky_dicom_header_dialog_tests PRIVATE /W4 /permissive-)
     target_compile_options(
@@ -231,6 +242,8 @@ else()
     target_compile_options(
         radmarky_about_dialog_tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(
+        radmarky_shortcuts_dialog_tests PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(
         radmarky_dicom_header_dialog_tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(
         radmarky_dicom_series_dialog_tests PRIVATE -Wall -Wextra -Wpedantic)
@@ -270,6 +283,7 @@ add_test(NAME dicom_series COMMAND radmarky_dicom_series_tests)
 add_test(NAME dicom_geometry COMMAND radmarky_dicom_geometry_tests)
 add_test(NAME dicom_reader COMMAND radmarky_dicom_reader_tests)
 add_test(NAME about_dialog COMMAND radmarky_about_dialog_tests)
+add_test(NAME shortcuts_dialog COMMAND radmarky_shortcuts_dialog_tests)
 add_test(NAME dicom_header_dialog COMMAND radmarky_dicom_header_dialog_tests)
 add_test(NAME dicom_series_dialog COMMAND radmarky_dicom_series_dialog_tests)
 add_test(NAME gif_export COMMAND radmarky_gif_export_tests)

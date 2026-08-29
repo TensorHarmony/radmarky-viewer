@@ -71,6 +71,7 @@ public:
     void setInteractionMode(InteractionMode mode);
     void zoomIn();
     void zoomOut();
+    void panBy(double horizontalDirection, double verticalDirection);
     void resetView();
     QImage captureSliceImage(bool showCrosshair, bool respectZoom);
     QImage captureImageWithoutCrosshair();

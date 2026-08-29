@@ -1239,6 +1239,40 @@ void OrthogonalViewer::zoomAllOut()
     }
 }
 
+void OrthogonalViewer::panActiveView(
+    const double horizontalDirection,
+    const double verticalDirection)
+{
+    const auto orientation =
+        impl_->focusedView.value_or(impl_->inspectionOrientation);
+    const auto panel = std::find_if(
+        impl_->panels.begin(),
+        impl_->panels.end(),
+        [orientation](const SlicePanel& candidate) {
+            return candidate.orientation == orientation;
+        });
+    if(panel != impl_->panels.end())
+    {
+        panel->viewport->panBy(horizontalDirection, verticalDirection);
+    }
+}
+
+void OrthogonalViewer::resetActiveView()
+{
+    const auto orientation =
+        impl_->focusedView.value_or(impl_->inspectionOrientation);
+    const auto panel = std::find_if(
+        impl_->panels.begin(),
+        impl_->panels.end(),
+        [orientation](const SlicePanel& candidate) {
+            return candidate.orientation == orientation;
+        });
+    if(panel != impl_->panels.end())
+    {
+        panel->viewport->resetView();
+    }
+}
+
 void OrthogonalViewer::resetAllViews()
 {
     for(auto& panel : impl_->panels)

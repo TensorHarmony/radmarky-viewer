@@ -61,6 +61,8 @@ public:
     void redoAnnotationEdit();
     void zoomAllIn();
     void zoomAllOut();
+    void panActiveView(double horizontalDirection, double verticalDirection);
+    void resetActiveView();
     void resetAllViews();
     void showAllViews();
     void focusAxialView();

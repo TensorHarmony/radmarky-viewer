@@ -13,6 +13,7 @@
 #include "ui/AboutDialog.h"
 #include "ui/DicomSeriesDialog.h"
 #include "ui/DicomHeaderDialog.h"
+#include "ui/ShortcutsDialog.h"
 #include "ui/UiTheme.h"
 #include "ui/ValidationManagementDialog.h"
 #include "ui/ViewerToolbox.h"
@@ -60,6 +61,7 @@
 #include <QPointer>
 #include <QPixmap>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QString>
@@ -904,7 +906,10 @@ MainWindow::MainWindow(QWidget* parent)
         qApp,
         &QApplication::focusChanged,
         this,
-        [this](QWidget*, QWidget*) { updateActiveLabelActions(); });
+        [this](QWidget*, QWidget*) {
+            updateActiveLabelActions();
+            updateViewerShortcutActions();
+        });
 
     connect(
         undoEditAction_, &QAction::triggered,
@@ -987,6 +992,62 @@ MainWindow::MainWindow(QWidget* parent)
     viewMenu->addAction(zoomOutAction);
     viewMenu->addAction(centerAction);
     viewMenu->addAction(recordGifAction);
+
+    annotationVisibilityAction_ = viewMenu->addAction(
+        tr("Hide annotation overlays"));
+    annotationVisibilityAction_->setObjectName(
+        QStringLiteral("annotationVisibilityAction"));
+    annotationVisibilityAction_->setCheckable(true);
+    annotationVisibilityAction_->setChecked(false);
+    annotationVisibilityAction_->setShortcut(QKeySequence(Qt::Key_H));
+    annotationVisibilityAction_->setToolTip(
+        tr("Show or hide all annotation overlays (H)"));
+    connect(
+        annotationVisibilityAction_,
+        &QAction::toggled,
+        this,
+        [this](const bool hidden) {
+            setAnnotationsTemporarilyHidden(hidden);
+        });
+
+    const auto addPanShortcut = [this, viewMenu](
+                                    const QString& text,
+                                    const QString& objectName,
+                                    const Qt::Key key,
+                                    const double horizontalDirection,
+                                    const double verticalDirection) {
+        auto* const action = viewMenu->addAction(text);
+        action->setObjectName(objectName);
+        action->setShortcut(QKeySequence(key));
+        connect(action, &QAction::triggered, this, [this, horizontalDirection,
+                                                    verticalDirection] {
+            viewer_->panActiveView(horizontalDirection, verticalDirection);
+        });
+        viewerShortcutActions_.push_back(action);
+    };
+    viewMenu->addSeparator();
+    addPanShortcut(
+        tr("Pan active view up"), QStringLiteral("panViewUpAction"),
+        Qt::Key_W, 0.0, 1.0);
+    addPanShortcut(
+        tr("Pan active view left"), QStringLiteral("panViewLeftAction"),
+        Qt::Key_A, -1.0, 0.0);
+    addPanShortcut(
+        tr("Pan active view down"), QStringLiteral("panViewDownAction"),
+        Qt::Key_S, 0.0, -1.0);
+    addPanShortcut(
+        tr("Pan active view right"), QStringLiteral("panViewRightAction"),
+        Qt::Key_D, 1.0, 0.0);
+    auto* const fitActiveViewAction = viewMenu->addAction(tr("Fit active view"));
+    fitActiveViewAction->setObjectName(QStringLiteral("fitActiveViewAction"));
+    fitActiveViewAction->setShortcut(QKeySequence(Qt::Key_F));
+    connect(
+        fitActiveViewAction,
+        &QAction::triggered,
+        viewer_,
+        &rendering::OrthogonalViewer::resetActiveView);
+    viewerShortcutActions_.push_back(fitActiveViewAction);
+    viewerShortcutActions_.push_back(annotationVisibilityAction_);
     connect(
         allViewsAction,
         &QAction::triggered,
@@ -1143,6 +1204,15 @@ MainWindow::MainWindow(QWidget* parent)
 
     auto* const helpMenu = menuBar()->addMenu(tr("&Help"));
     helpMenu->setObjectName(QStringLiteral("helpMenu"));
+    auto* const shortcutsAction = helpMenu->addAction(tr("&Shortcuts…"));
+    shortcutsAction->setObjectName(QStringLiteral("shortcutsAction"));
+    shortcutsAction->setShortcut(QKeySequence::HelpContents);
+    connect(
+        shortcutsAction,
+        &QAction::triggered,
+        this,
+        &MainWindow::showShortcuts);
+    helpMenu->addSeparator();
     auto* const aboutAction = helpMenu->addAction(
         tr("&About %1").arg(QString::fromUtf8(
             applicationName.data(),
@@ -1491,8 +1561,13 @@ void MainWindow::createNewAnnotation()
         toolbox_->addAnnotation(
             name, tr("Labels"), annotation->opacity(), annotation->isVisible());
         const int index = static_cast<int>(annotations_.size() - 1);
+        if(annotationVisibilityAction_->isChecked())
+        {
+            setAnnotationVisibility(index, false);
+        }
         toolbox_->selectAnnotation(index);
         setAnnotationSelection({index});
+        updateViewerShortcutActions();
         annotationLabelsDock_->show();
         brushAction_->trigger();
         statusBar()->showMessage(
@@ -1633,6 +1708,12 @@ void MainWindow::validateOpenAnnotation()
 void MainWindow::showAbout()
 {
     AboutDialog dialog(this);
+    dialog.exec();
+}
+
+void MainWindow::showShortcuts()
+{
+    ShortcutsDialog dialog(this);
     dialog.exec();
 }
 
@@ -2009,6 +2090,25 @@ void MainWindow::setImageDependentActionsEnabled(const bool enabled)
     {
         layoutButton_->setEnabled(enabled);
     }
+    updateViewerShortcutActions();
+}
+
+void MainWindow::updateViewerShortcutActions()
+{
+    const bool enabled = primaryVolume_ != nullptr
+        && !isTextEntryWidget(QApplication::focusWidget());
+    for(auto* const action : viewerShortcutActions_)
+    {
+        action->setEnabled(
+            enabled
+            && (action != annotationVisibilityAction_ || !annotations_.empty()));
+    }
+    if(annotations_.empty() && annotationVisibilityAction_ != nullptr)
+    {
+        const QSignalBlocker blocker(annotationVisibilityAction_);
+        annotationVisibilityAction_->setChecked(false);
+        annotationsVisibleBeforeHide_.clear();
+    }
 }
 
 void MainWindow::updateActiveLabelActions()
@@ -2155,6 +2255,15 @@ void MainWindow::loadAnnotations(const QStringList& fileNames)
                 annotation->opacity(),
                 annotation->isVisible());
         }
+        if(annotationVisibilityAction_->isChecked())
+        {
+            for(std::size_t index = originalCount;
+                index < annotations_.size();
+                ++index)
+            {
+                setAnnotationVisibility(static_cast<int>(index), false);
+            }
+        }
         for(std::size_t offset = pending.size(); offset > 0; --offset)
         {
             if(pending[offset - 1]->kind() == core::AnnotationKind::LabelMap)
@@ -2168,6 +2277,7 @@ void MainWindow::loadAnnotations(const QStringList& fileNames)
         }
         finishImportProgress();
         updateActiveLabelActions();
+        updateViewerShortcutActions();
         statusBar()->showMessage(
             tr("Added %1 annotation layer(s)").arg(fileNames.size()), 5000);
     }
@@ -2178,6 +2288,7 @@ void MainWindow::loadAnnotations(const QStringList& fileNames)
             viewer_->removeAnnotation(annotations_.size() - 1);
             annotations_.pop_back();
         }
+        updateViewerShortcutActions();
         finishImportProgress();
         QMessageBox::critical(
             this,
@@ -3288,6 +3399,7 @@ void MainWindow::removeAnnotation(const int index)
     toolbox_->removeAnnotation(index);
     setAnnotationSelection(toolbox_->selectedAnnotationIndices());
     updateActiveLabelActions();
+    updateViewerShortcutActions();
     statusBar()->showMessage(tr("Removed annotation %1").arg(name), 4000);
 }
 
@@ -3331,6 +3443,42 @@ void MainWindow::setAnnotationVisibility(const int index, const bool visible)
         qWarning().noquote()
             << "[RENDER] Annotation visibility update failed:" << exception.what();
     }
+}
+
+void MainWindow::setAnnotationsTemporarilyHidden(const bool hidden)
+{
+    if(hidden)
+    {
+        annotationsVisibleBeforeHide_.clear();
+        annotationsVisibleBeforeHide_.reserve(annotations_.size());
+        for(const auto& annotation : annotations_)
+        {
+            if(annotation->isVisible())
+            {
+                annotationsVisibleBeforeHide_.push_back(annotation);
+            }
+        }
+        for(std::size_t index = 0; index < annotations_.size(); ++index)
+        {
+            setAnnotationVisibility(static_cast<int>(index), false);
+        }
+        statusBar()->showMessage(tr("Annotation overlays hidden"), 2000);
+        return;
+    }
+
+    for(std::size_t index = 0; index < annotations_.size(); ++index)
+    {
+        const auto& annotation = annotations_[index];
+        const bool restoreVisible = std::any_of(
+            annotationsVisibleBeforeHide_.begin(),
+            annotationsVisibleBeforeHide_.end(),
+            [&annotation](const std::weak_ptr<core::Annotation>& previous) {
+                return previous.lock() == annotation;
+            });
+        setAnnotationVisibility(static_cast<int>(index), restoreVisible);
+    }
+    annotationsVisibleBeforeHide_.clear();
+    statusBar()->showMessage(tr("Annotation overlays restored"), 2000);
 }
 
 void MainWindow::setAnnotationSelection(const QList<int>& indices)

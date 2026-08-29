@@ -86,6 +86,7 @@ private:
     void showDicomHeader();
     void showValidationManagement();
     void validateOpenAnnotation();
+    void showShortcuts();
     void showAbout();
     void createNewAnnotation();
     void saveSelectedAnnotation();
@@ -135,6 +136,7 @@ private:
     void removeAnnotation(int index);
     void setAnnotationOpacity(int index, double opacity);
     void setAnnotationVisibility(int index, bool visible);
+    void setAnnotationsTemporarilyHidden(bool hidden);
     void setAnnotationSelection(const QList<int>& indices);
     void applyTheme(bool dark);
     void setDropActive(bool active);
@@ -146,6 +148,7 @@ private:
         double indexY,
         double indexZ);
     void setImageDependentActionsEnabled(bool enabled);
+    void updateViewerShortcutActions();
     void updateActiveLabelActions();
     void activateAnnotationDigit(int digit);
     [[nodiscard]] bool ensureEditableAnnotationForShortcut();
@@ -203,8 +206,11 @@ private:
     QAction* scopedEraseAction_ = nullptr;
     QAction* undoEditAction_ = nullptr;
     QAction* redoEditAction_ = nullptr;
+    QAction* annotationVisibilityAction_ = nullptr;
     QList<QAction*> activeLabelActions_;
+    QList<QAction*> viewerShortcutActions_;
     QList<QAction*> imageDependentActions_;
+    std::vector<std::weak_ptr<core::Annotation>> annotationsVisibleBeforeHide_;
     QToolButton* layoutButton_ = nullptr;
     std::shared_ptr<core::Volume> primaryVolume_;
     std::vector<std::shared_ptr<core::Annotation>> annotations_;

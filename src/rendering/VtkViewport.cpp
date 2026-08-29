@@ -1241,6 +1241,37 @@ void VtkViewport::zoomOut()
     zoomBy(0.8);
 }
 
+void VtkViewport::panBy(
+    const double horizontalDirection,
+    const double verticalDirection)
+{
+    if(!impl_->sliceGeometry
+       || !std::isfinite(horizontalDirection)
+       || !std::isfinite(verticalDirection))
+    {
+        return;
+    }
+    auto* const camera = impl_->renderer->GetActiveCamera();
+    const double step = camera->GetParallelScale() * 0.1;
+    double position[3]{};
+    double focalPoint[3]{};
+    camera->GetPosition(position);
+    camera->GetFocalPoint(focalPoint);
+    const double horizontalTranslation = -horizontalDirection * step;
+    const double verticalTranslation = -verticalDirection * step;
+    camera->SetPosition(
+        position[0] + horizontalTranslation,
+        position[1] + verticalTranslation,
+        position[2]);
+    camera->SetFocalPoint(
+        focalPoint[0] + horizontalTranslation,
+        focalPoint[1] + verticalTranslation,
+        focalPoint[2]);
+    impl_->renderer->ResetCameraClippingRange();
+    updateZoomThumbnail();
+    impl_->renderWindow->Render();
+}
+
 void VtkViewport::resetView()
 {
     if(!impl_->sliceGeometry)
