@@ -148,4 +148,14 @@ if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) {
     throw "Inno Setup completed but '$installer' was not produced."
 }
 
+$installerHash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+$checksumFile = "$installer.sha256"
+$checksumEntry = "$installerHash  $([System.IO.Path]::GetFileName($installer))`r`n"
+[System.IO.File]::WriteAllText(
+    $checksumFile,
+    $checksumEntry,
+    [System.Text.Encoding]::ASCII
+)
+
 Write-Host "Installer ready: $installer" -ForegroundColor Green
+Write-Host "SHA-256 checksum ready: $checksumFile" -ForegroundColor Green

@@ -21,7 +21,9 @@ installs or upgrades it automatically when required.
 The script reads the application version from `cmake/Version.cmake`, downloads
 the redistributable from Microsoft's `https://aka.ms/vc14/` permalink if it is
 not already cached, verifies its Microsoft Authenticode signature, and writes
-the finished installer to `out/installers`.
+the finished installer and a companion `.sha256` checksum file to
+`out/installers`. The checksum file contains the lowercase SHA-256 digest,
+two spaces, and the installer filename so standard checksum tools can verify it.
 
 Use `-ReleaseDirectory`, `-VCRedistPath`, or `-InnoCompiler` to override the
 defaults. The redistributable is embedded in the finished setup executable, so
