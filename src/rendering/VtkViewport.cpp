@@ -2,6 +2,7 @@
 
 #include "core/BrushGeometry.h"
 #include "rendering/OrthogonalReslice.h"
+#include "rendering/RenderProfiling.h"
 #include "core/LabelPalette.h"
 #include "core/PhysicalMeasurement.h"
 #include "ui/UiTheme.h"
@@ -9,6 +10,7 @@
 #include <QColor>
 #include <QCursor>
 #include <QDebug>
+#include <QElapsedTimer>
 #include <QEvent>
 #include <QGuiApplication>
 #include <QImage>
@@ -35,6 +37,7 @@
 #include <vtkPolyData.h>
 #include <vtkPolyDataMapper.h>
 #include <vtkProperty.h>
+#include <vtkPropCollection.h>
 #include <vtkRenderer.h>
 #include <vtkSmartPointer.h>
 #include <vtkTextActor.h>
@@ -331,6 +334,17 @@ AnnotationPipeline makeAnnotationPipeline(
         labelMap ? VTK_NEAREST_INTERPOLATION : VTK_LINEAR_INTERPOLATION);
     pipeline.imageSlice->SetPosition(0.0, 0.0, depth);
     return pipeline;
+}
+
+void releaseAnnotationPipeline(
+    AnnotationPipeline& pipeline,
+    vtkGenericOpenGLRenderWindow& renderWindow)
+{
+    pipeline.imageSlice->ReleaseGraphicsResources(&renderWindow);
+    pipeline.reslice->SetInputData(nullptr);
+    pipeline.mapper->SetInputConnection(nullptr);
+    pipeline.imageSlice->SetMapper(nullptr);
+    pipeline.imageData = nullptr;
 }
 
 } // namespace
@@ -707,7 +721,9 @@ void VtkViewport::removeAnnotation(const std::size_t index)
     {
         throw std::out_of_range("Annotation overlay index is out of range");
     }
-    impl_->renderer->RemoveViewProp(impl_->annotations[index].imageSlice);
+    auto& removed = impl_->annotations[index];
+    impl_->renderer->RemoveViewProp(removed.imageSlice);
+    releaseAnnotationPipeline(removed, *impl_->renderWindow);
     impl_->annotations.erase(
         impl_->annotations.begin() + static_cast<std::ptrdiff_t>(index));
     for(std::size_t layer = index; layer < impl_->annotations.size(); ++layer)
@@ -778,6 +794,8 @@ void VtkViewport::setAnnotationComparison(
     {
         impl_->renderer->RemoveViewProp(
             impl_->annotationComparison->imageSlice);
+        releaseAnnotationPipeline(
+            *impl_->annotationComparison, *impl_->renderWindow);
     }
 
     impl_->annotationComparison = makeAnnotationPipeline(
@@ -805,6 +823,8 @@ void VtkViewport::clearAnnotationComparison()
         return;
     }
     impl_->renderer->RemoveViewProp(impl_->annotationComparison->imageSlice);
+    releaseAnnotationPipeline(
+        *impl_->annotationComparison, *impl_->renderWindow);
     impl_->annotationComparison.reset();
     for(auto& annotation : impl_->annotations)
     {
@@ -841,21 +861,29 @@ void VtkViewport::setAnnotationComparisonVisibility(const bool visible)
 
 void VtkViewport::clearInput()
 {
+    const bool profiling = renderProfilingEnabled();
+    const auto previousAnnotationCount = impl_->annotations.size();
+    const vtkIdType previousPropCount = profiling
+        ? impl_->renderer->GetViewProps()->GetNumberOfItems() : 0;
     for(auto& annotation : impl_->annotations)
     {
         impl_->renderer->RemoveViewProp(annotation.imageSlice);
+        releaseAnnotationPipeline(annotation, *impl_->renderWindow);
     }
     impl_->annotations.clear();
     if(impl_->annotationComparison)
     {
         impl_->renderer->RemoveViewProp(
             impl_->annotationComparison->imageSlice);
+        releaseAnnotationPipeline(
+            *impl_->annotationComparison, *impl_->renderWindow);
         impl_->annotationComparison.reset();
     }
     impl_->sliceGeometry.reset();
     impl_->imageGeometry.reset();
     impl_->inspectedPhysical.reset();
     impl_->imageData = nullptr;
+    impl_->imageSlice->ReleaseGraphicsResources(impl_->renderWindow);
     impl_->reslice->SetInputData(nullptr);
     impl_->imageSlice->SetVisibility(false);
     impl_->zoomThumbnailImageSlice->SetVisibility(false);
@@ -877,6 +905,17 @@ void VtkViewport::clearInput()
     impl_->dragMode = DragMode::None;
     setPanGrabCursor(false);
     impl_->renderWindow->Render();
+    if(profiling)
+    {
+        qInfo().noquote()
+            << QStringLiteral(
+                   "[PROFILE] viewport_clear orientation=%1 overlays=%2 "
+                   "props_before=%3 props_after=%4")
+                   .arg(QString::fromLatin1(orientationTitle(impl_->orientation)))
+                   .arg(static_cast<qulonglong>(previousAnnotationCount))
+                   .arg(previousPropCount)
+                   .arg(impl_->renderer->GetViewProps()->GetNumberOfItems());
+    }
 }
 
 void VtkViewport::setCursor(
@@ -887,6 +926,12 @@ void VtkViewport::setCursor(
         return;
     }
 
+    const bool profiling = renderProfilingEnabled();
+    QElapsedTimer timer;
+    if(profiling)
+    {
+        timer.start();
+    }
     const double previousSlice =
         impl_->sliceGeometry->normalCoordinate(impl_->cursorPhysical);
     const double nextSlice =
@@ -913,9 +958,29 @@ void VtkViewport::setCursor(
             *impl_->sliceGeometry,
             cursorPhysical);
     }
+    const qint64 pipelineMicroseconds = profiling
+        ? timer.nsecsElapsed() / 1000 : 0;
     updateCrosshair();
     impl_->renderer->ResetCameraClippingRange();
+    const qint64 overlayMicroseconds = profiling
+        ? timer.nsecsElapsed() / 1000 - pipelineMicroseconds : 0;
     impl_->renderWindow->Render();
+    if(profiling)
+    {
+        const qint64 totalMicroseconds = timer.nsecsElapsed() / 1000;
+        qInfo().noquote()
+            << QStringLiteral(
+                   "[PROFILE] viewport_cursor orientation=%1 overlays=%2 "
+                   "props=%3 pipeline_us=%4 overlay_us=%5 render_us=%6 total_us=%7")
+                   .arg(QString::fromLatin1(orientationTitle(impl_->orientation)))
+                   .arg(static_cast<qulonglong>(impl_->annotations.size()))
+                   .arg(impl_->renderer->GetViewProps()->GetNumberOfItems())
+                   .arg(pipelineMicroseconds)
+                   .arg(overlayMicroseconds)
+                   .arg(totalMicroseconds - pipelineMicroseconds
+                        - overlayMicroseconds)
+                   .arg(totalMicroseconds);
+    }
 }
 
 void VtkViewport::setSliceCounter(

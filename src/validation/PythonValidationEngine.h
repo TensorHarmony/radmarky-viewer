@@ -41,7 +41,7 @@ class PythonValidationEngine
 {
 public:
     explicit PythonValidationEngine(
-        std::chrono::milliseconds timeout = std::chrono::seconds(30),
+        std::chrono::milliseconds timeout = std::chrono::minutes(5),
         QString pythonExecutable = {});
 
     [[nodiscard]] PythonValidationResult inspectScript(

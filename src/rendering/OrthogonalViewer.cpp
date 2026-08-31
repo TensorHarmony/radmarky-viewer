@@ -10,12 +10,14 @@
 #include "io/AnimatedGifWriter.h"
 #include "io/Mp4Writer.h"
 #include "rendering/ItkVtkImageBridge.h"
+#include "rendering/RenderProfiling.h"
 #include "rendering/VtkViewport.h"
 #include "ui/GifExportDialog.h"
 #include "ui/UiTheme.h"
 
 #include <QCoreApplication>
 #include <QDebug>
+#include <QElapsedTimer>
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -1883,12 +1885,23 @@ void OrthogonalViewer::publishCursor()
     {
         return;
     }
+    const bool profiling = renderProfilingEnabled();
+    QElapsedTimer profileTimer;
+    if(profiling)
+    {
+        profileTimer.start();
+    }
+    std::array<qint64, 3> panelMicroseconds{};
     const auto& physical = impl_->state->cursorPhysical();
     const auto index = impl_->state->cursorContinuousIndex();
     const int axialSliceCount = totalAxialSlices(impl_->state->geometry());
     const int axialSlice = currentAxialSlice(*impl_->state);
-    for(auto& panel : impl_->panels)
+    for(std::size_t panelIndex = 0;
+        panelIndex < impl_->panels.size(); ++panelIndex)
     {
+        auto& panel = impl_->panels[panelIndex];
+        const qint64 panelStart = profiling
+            ? profileTimer.nsecsElapsed() / 1000 : 0;
         if(panel.geometry && panel.sliceScrollBar->maximum() > 0)
         {
             const double fraction =
@@ -1904,21 +1917,40 @@ void OrthogonalViewer::publishCursor()
             panel.viewport->setSliceCounter(axialSlice, axialSliceCount);
         }
         panel.viewport->setCursor(physical);
+        if(profiling)
+        {
+            panelMicroseconds[panelIndex] =
+                profileTimer.nsecsElapsed() / 1000 - panelStart;
+        }
     }
 
-    qInfo().noquote()
-        << QStringLiteral(
-               "[GEOMETRY] cursor physical = %1, %2, %3; index = %4, %5, %6")
-               .arg(physical[0])
-               .arg(physical[1])
-               .arg(physical[2])
-               .arg(index[0])
-               .arg(index[1])
-               .arg(index[2]);
+    if(profiling)
+    {
+        qInfo().noquote()
+            << QStringLiteral(
+                   "[PROFILE] cursor physical=%1,%2,%3 index=%4,%5,%6 "
+                   "axial_us=%7 sagittal_us=%8 coronal_us=%9 panels_us=%10")
+                   .arg(physical[0])
+                   .arg(physical[1])
+                   .arg(physical[2])
+                   .arg(index[0])
+                   .arg(index[1])
+                   .arg(index[2])
+                   .arg(panelMicroseconds[0])
+                   .arg(panelMicroseconds[1])
+                   .arg(panelMicroseconds[2])
+                   .arg(profileTimer.nsecsElapsed() / 1000);
+    }
     emit cursorChanged(
         physical[0], physical[1], physical[2], index[0], index[1], index[2]);
     inspectPhysicalPoint(
         physical[0], physical[1], physical[2], impl_->inspectionOrientation);
+    if(profiling)
+    {
+        qInfo().noquote()
+            << QStringLiteral("[PROFILE] cursor_complete total_us=%1")
+                   .arg(profileTimer.nsecsElapsed() / 1000);
+    }
 }
 
 void OrthogonalViewer::beginWindowLevelDrag()

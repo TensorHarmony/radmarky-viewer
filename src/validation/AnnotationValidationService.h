@@ -55,7 +55,7 @@ public:
         std::function<void(int current, int total, const QString& scriptName)>;
 
     explicit AnnotationValidationService(
-        std::chrono::milliseconds timeout = std::chrono::seconds(30));
+        std::chrono::milliseconds timeout = std::chrono::minutes(5));
 
     [[nodiscard]] PythonValidationResult inspectScript(
         const QString& scriptPath,
