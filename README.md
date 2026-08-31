@@ -152,8 +152,10 @@ the active label. Missing files are reported rather than silently ignored.
   second, green is the same non-zero value in both, and yellow marks conflicting
   non-zero values.
 - Create a blank label map aligned to the anatomical image.
-- Paint or erase in the axial view with configurable brush size, active labels,
-  and paint-over rules.
+- Paint or erase in the axial view with active labels and paint-over rules.
+  Choose `Clear (Eraser)` from the label selector to erase; every label and the
+  eraser retain independent brush-size and paint-over choices across application
+  runs.
 - Clear an 8-connected component on the current axial slice with scoped erase.
 - Undo and redo complete brush, erase, or scoped-erase operations.
 - Save edited label maps as `.nii` or `.nii.gz` while preserving image geometry.

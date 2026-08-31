@@ -24,6 +24,9 @@ namespace
 
 constexpr int schemaVersion = 1;
 constexpr std::size_t maximumRecentImages = 8;
+constexpr int minimumBrushRadius = 1;
+constexpr int maximumBrushRadius = 100;
+constexpr int maximumLabel = 65535;
 
 QList<int> positiveIntList(const QJsonValue& value)
 {
@@ -172,6 +175,61 @@ void UserSettings::addWindowLevelPreset(
     save();
 }
 
+int UserSettings::brushRadius(const int label) const noexcept
+{
+    const auto found = brushRadii_.find(label);
+    return found != brushRadii_.end() ? found->second : minimumBrushRadius;
+}
+
+const std::map<int, int>& UserSettings::brushRadii() const noexcept
+{
+    return brushRadii_;
+}
+
+void UserSettings::setBrushRadius(const int label, const int radius)
+{
+    if(label < 0 || label > maximumLabel
+       || radius < minimumBrushRadius || radius > maximumBrushRadius)
+    {
+        return;
+    }
+    const auto found = brushRadii_.find(label);
+    if(found != brushRadii_.end() && found->second == radius)
+    {
+        return;
+    }
+    brushRadii_[label] = radius;
+    save();
+}
+
+int UserSettings::paintOverSelection(const int label) const noexcept
+{
+    const auto found = paintOverSelections_.find(label);
+    return found != paintOverSelections_.end() ? found->second : -1;
+}
+
+const std::map<int, int>& UserSettings::paintOverSelections() const noexcept
+{
+    return paintOverSelections_;
+}
+
+void UserSettings::setPaintOverSelection(
+    const int label, const int selection)
+{
+    if(label < 0 || label > maximumLabel
+       || selection < -1 || selection > maximumLabel)
+    {
+        return;
+    }
+    const auto found = paintOverSelections_.find(label);
+    if(found != paintOverSelections_.end() && found->second == selection)
+    {
+        return;
+    }
+    paintOverSelections_[label] = selection;
+    save();
+}
+
 const std::vector<RecentImageSetting>& UserSettings::recentImages() const noexcept
 {
     return recentImages_;
@@ -312,6 +370,37 @@ void UserSettings::load()
     validationPresetsAdded_ =
         root.value(QStringLiteral("validationPresetsAdded")).toBool(false);
 
+    const QJsonObject brushRadii =
+        root.value(QStringLiteral("brushRadii")).toObject();
+    for(auto value = brushRadii.constBegin(); value != brushRadii.constEnd(); ++value)
+    {
+        bool validLabel = false;
+        const int label = value.key().toInt(&validLabel);
+        const int radius = value.value().toInt();
+        if(validLabel && label >= 0 && label <= maximumLabel
+           && value.value().isDouble()
+           && radius >= minimumBrushRadius && radius <= maximumBrushRadius)
+        {
+            brushRadii_[label] = radius;
+        }
+    }
+
+    const QJsonObject paintOverSelections =
+        root.value(QStringLiteral("paintOverSelections")).toObject();
+    for(auto value = paintOverSelections.constBegin();
+        value != paintOverSelections.constEnd(); ++value)
+    {
+        bool validLabel = false;
+        const int label = value.key().toInt(&validLabel);
+        const int selection = value.value().toInt(-2);
+        if(validLabel && label >= 0 && label <= maximumLabel
+           && value.value().isDouble()
+           && selection >= -1 && selection <= maximumLabel)
+        {
+            paintOverSelections_[label] = selection;
+        }
+    }
+
     const auto readWindowLevel = [](const QJsonObject& object,
                                     const bool requireName)
         -> std::optional<WindowLevelSetting> {
@@ -402,7 +491,7 @@ void UserSettings::load()
         }
         const int activeLabel =
             object.value(QStringLiteral("activeLabel")).toInt(1);
-        if(activeLabel >= 1 && activeLabel <= 65535)
+        if(activeLabel >= 0 && activeLabel <= maximumLabel)
         {
             recent.activeLabel = activeLabel;
         }
@@ -511,6 +600,18 @@ void UserSettings::save() const
     root.insert(QStringLiteral("darkTheme"), darkTheme_);
     root.insert(QStringLiteral("keepWindowOnTop"), keepWindowOnTop_);
     root.insert(QStringLiteral("validationPresetsAdded"), validationPresetsAdded_);
+    QJsonObject brushRadii;
+    for(const auto& [label, radius] : brushRadii_)
+    {
+        brushRadii.insert(QString::number(label), radius);
+    }
+    root.insert(QStringLiteral("brushRadii"), brushRadii);
+    QJsonObject paintOverSelections;
+    for(const auto& [label, selection] : paintOverSelections_)
+    {
+        paintOverSelections.insert(QString::number(label), selection);
+    }
+    root.insert(QStringLiteral("paintOverSelections"), paintOverSelections);
     if(defaultWindowLevel_)
     {
         QJsonObject value;

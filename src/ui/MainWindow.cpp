@@ -788,17 +788,26 @@ MainWindow::MainWindow(QWidget* parent)
         tr("Brush: paint the selected label map in the axial view. "
            "Press 1–9 to choose a label, [ and ] to change brush size"));
     eraseAction_->setToolTip(
-        tr("Erase: clear the selected label map in the axial view. "
+        tr("Erase: select Clear (Eraser) for the active label. "
            "Press 0 to erase"));
     scopedEraseAction_->setToolTip(
         tr("Scoped Erase: click a labeled voxel in the axial view to clear "
            "its 8-connected component on that slice"));
     connect(
         brushAction_, &QAction::triggered,
-        viewer_, &rendering::OrthogonalViewer::setBrushTool);
+        this, [this] {
+            const int label = toolbox_->activeLabel() == 0
+                ? lastPaintLabel_ : toolbox_->activeLabel();
+            toolbox_->setActiveLabel(label);
+            viewer_->setActiveLabel(label);
+            viewer_->setBrushTool();
+        });
     connect(
         eraseAction_, &QAction::triggered,
-        viewer_, &rendering::OrthogonalViewer::setEraseTool);
+        this, [this] {
+            toolbox_->setActiveLabel(0);
+            viewer_->setEraseTool();
+        });
     connect(
         scopedEraseAction_, &QAction::triggered,
         viewer_, &rendering::OrthogonalViewer::setScopedEraseTool);
@@ -1328,8 +1337,19 @@ MainWindow::MainWindow(QWidget* parent)
     connect(
         toolbox_,
         &ViewerToolbox::activeLabelChanged,
-        viewer_,
-        &rendering::OrthogonalViewer::setActiveLabel);
+        this,
+        [this](const int label) {
+            if(label == 0)
+            {
+                eraseAction_->setChecked(true);
+                viewer_->setEraseTool();
+                return;
+            }
+            lastPaintLabel_ = label;
+            brushAction_->setChecked(true);
+            viewer_->setActiveLabel(label);
+            viewer_->setBrushTool();
+        });
     connect(
         toolbox_,
         &ViewerToolbox::paintOverChanged,
@@ -1337,9 +1357,23 @@ MainWindow::MainWindow(QWidget* parent)
         &rendering::OrthogonalViewer::setPaintOver);
     connect(
         toolbox_,
+        &ViewerToolbox::paintOverPreferenceChanged,
+        this,
+        [this](const int label, const int selection) {
+            settings_.setPaintOverSelection(label, selection);
+        });
+    connect(
+        toolbox_,
         &ViewerToolbox::brushRadiusChanged,
         viewer_,
         &rendering::OrthogonalViewer::setBrushRadius);
+    connect(
+        toolbox_,
+        &ViewerToolbox::brushRadiusPreferenceChanged,
+        this,
+        [this](const int label, const int radius) {
+            settings_.setBrushRadius(label, radius);
+        });
     connect(
         toolbox_,
         &ViewerToolbox::brushShapeChanged,
@@ -1390,6 +1424,8 @@ MainWindow::MainWindow(QWidget* parent)
         &ViewerToolbox::setWindowLevel);
 
     toolbox_->setNamedWindowLevelPresets(settings_.windowLevelPresets());
+    toolbox_->setBrushRadii(settings_.brushRadii());
+    toolbox_->setPaintOverSelections(settings_.paintOverSelections());
     const auto removedRecents = settings_.removeMissingRecentImages();
     if(removedRecents > 0)
     {
@@ -2160,6 +2196,7 @@ void MainWindow::activateAnnotationDigit(const int digit)
     if(digit == 0)
     {
         eraseAction_->setChecked(true);
+        toolbox_->setActiveLabel(0);
         viewer_->setEraseTool();
         return;
     }

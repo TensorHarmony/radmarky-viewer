@@ -210,6 +210,7 @@ private:
     QList<QAction*> activeLabelActions_;
     QList<QAction*> viewerShortcutActions_;
     QList<QAction*> imageDependentActions_;
+    int lastPaintLabel_ = 1;
     std::vector<std::weak_ptr<core::Annotation>> annotationsVisibleBeforeHide_;
     QToolButton* layoutButton_ = nullptr;
     std::shared_ptr<core::Volume> primaryVolume_;

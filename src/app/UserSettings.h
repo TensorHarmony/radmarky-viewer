@@ -6,6 +6,7 @@
 #include <QStringList>
 
 #include <cstddef>
+#include <map>
 #include <optional>
 #include <vector>
 
@@ -79,6 +80,14 @@ public:
     windowLevelPresets() const noexcept;
     void addWindowLevelPreset(const QString& name, double window, double level);
 
+    [[nodiscard]] int brushRadius(int label) const noexcept;
+    [[nodiscard]] const std::map<int, int>& brushRadii() const noexcept;
+    void setBrushRadius(int label, int radius);
+
+    [[nodiscard]] int paintOverSelection(int label) const noexcept;
+    [[nodiscard]] const std::map<int, int>& paintOverSelections() const noexcept;
+    void setPaintOverSelection(int label, int selection);
+
     [[nodiscard]] const std::vector<RecentImageSetting>& recentImages() const noexcept;
     void addRecentImage(RecentImageSetting recent);
     bool removeRecentImage(std::size_t index);
@@ -104,6 +113,8 @@ private:
     bool keepWindowOnTop_ = false;
     std::optional<WindowLevelSetting> defaultWindowLevel_;
     std::vector<WindowLevelSetting> windowLevelPresets_;
+    std::map<int, int> brushRadii_;
+    std::map<int, int> paintOverSelections_;
     std::vector<RecentImageSetting> recentImages_;
     std::vector<ValidationScriptSetting> validationScripts_;
     std::optional<WindowLayoutSetting> windowLayout_;

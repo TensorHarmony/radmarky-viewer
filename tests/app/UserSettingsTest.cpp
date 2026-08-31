@@ -85,6 +85,24 @@ int main(int argc, char* argv[])
         passed &= expect(QFile::exists(path), "settings file created");
         settings.setDefaultWindowLevel(410.0, 45.0);
         settings.addWindowLevelPreset(QStringLiteral("Vessels"), 700.0, 210.0);
+        passed &= expect(settings.brushRadius(0) == 1, "eraser brush size default");
+        passed &= expect(settings.brushRadius(7) == 1, "label brush size default");
+        settings.setBrushRadius(0, 9);
+        settings.setBrushRadius(1, 3);
+        settings.setBrushRadius(7, 12);
+        settings.setBrushRadius(-1, 50);
+        settings.setBrushRadius(8, 101);
+        passed &= expect(
+            settings.paintOverSelection(0) == -1,
+            "eraser paint-over default");
+        passed &= expect(
+            settings.paintOverSelection(7) == -1,
+            "label paint-over default");
+        settings.setPaintOverSelection(0, 0);
+        settings.setPaintOverSelection(1, -1);
+        settings.setPaintOverSelection(7, 3);
+        settings.setPaintOverSelection(-1, 2);
+        settings.setPaintOverSelection(8, 65536);
         settings.addRecentImage(radmarky::app::RecentImageSetting{
             QStringLiteral("existing-scan.nii.gz"),
             QStringLiteral("NIfTI"),
@@ -99,7 +117,12 @@ int main(int argc, char* argv[])
             QStringLiteral("scan.nii.gz"),
             QStringLiteral("NIfTI"),
             {QStringLiteral("C:/images/scan.nii.gz")},
-            QStringLiteral("C:/cache/scan.png")});
+            QStringLiteral("C:/cache/scan.png"),
+            {},
+            0,
+            0,
+            {},
+            0});
         settings.setValidationScripts({
             {QStringLiteral("Continuity"), QStringLiteral("C:/validators/one.py"), true},
             {QStringLiteral("Contours"), QStringLiteral("C:/validators/two.py"), false},
@@ -117,6 +140,18 @@ int main(int argc, char* argv[])
         passed &= expect(settings.darkTheme(), "dark theme round trip");
         passed &= expect(
             settings.keepWindowOnTop(), "keep-on-top round trip");
+        passed &= expect(
+            settings.brushRadius(0) == 9
+                && settings.brushRadius(1) == 3
+                && settings.brushRadius(7) == 12
+                && settings.brushRadius(8) == 1,
+            "per-label and eraser brush sizes round trip");
+        passed &= expect(
+            settings.paintOverSelection(0) == 0
+                && settings.paintOverSelection(1) == -1
+                && settings.paintOverSelection(7) == 3
+                && settings.paintOverSelection(8) == -1,
+            "per-label and eraser paint-over choices round trip");
         passed &= expect(
             settings.defaultWindowLevel().has_value(),
             "default window level round trip");
@@ -140,6 +175,9 @@ int main(int argc, char* argv[])
                     && settings.recentImages()[1].name
                         == QStringLiteral("existing-scan.nii.gz"),
                 "most recently opened image is first");
+            passed &= expect(
+                settings.recentImages()[0].activeLabel == 0,
+                "clear eraser selection round trip");
             passed &= expect(
                 settings.recentImages()[1].thumbnailPath
                     == QStringLiteral("C:/cache/existing-scan.png"),

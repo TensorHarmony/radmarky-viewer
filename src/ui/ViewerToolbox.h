@@ -8,6 +8,7 @@
 #include <QWidget>
 #include <QList>
 
+#include <map>
 #include <vector>
 
 class QComboBox;
@@ -66,6 +67,8 @@ public:
     void setAnnotationLabels(const QList<int>& labels);
     void setActiveLabel(int label);
     [[nodiscard]] int activeLabel() const;
+    void setBrushRadii(const std::map<int, int>& radii);
+    void setPaintOverSelections(const std::map<int, int>& selections);
     void adjustBrushRadius(int delta);
     void setAnnotationEditingState(
         bool editable, bool canUndo, bool canRedo);
@@ -94,12 +97,15 @@ signals:
     void annotationSelectionChanged(const QList<int>& indices);
     void activeLabelChanged(int label);
     void paintOverChanged(int selection);
+    void paintOverPreferenceChanged(int label, int selection);
     void brushRadiusChanged(int radius);
+    void brushRadiusPreferenceChanged(int label, int radius);
     void brushShapeChanged(core::BrushShape shape);
     void overallLabelOpacityChanged(double opacity);
 
 private:
     void updateAnnotationEmptyState();
+    void applyPaintOverForActiveLabel();
 
     QLineEdit* cursorX_ = nullptr;
     QLineEdit* cursorY_ = nullptr;
@@ -138,6 +144,8 @@ private:
     QStackedWidget* contentStack_ = nullptr;
     QScrollArea* controlsScroll_ = nullptr;
     QWidget* controlsPage_ = nullptr;
+    std::map<int, int> brushRadii_;
+    std::map<int, int> paintOverSelections_;
     std::vector<app::WindowLevelSetting> namedPresets_;
 };
 

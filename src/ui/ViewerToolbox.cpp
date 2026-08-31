@@ -76,7 +76,7 @@ public:
 
     [[nodiscard]] int rowCount(const QModelIndex& parent = {}) const override
     {
-        return parent.isValid() ? 0 : 65535;
+        return parent.isValid() ? 0 : 65536;
     }
 
     [[nodiscard]] QVariant data(
@@ -86,10 +86,10 @@ public:
         {
             return {};
         }
-        const int label = index.row() + 1;
+        const int label = index.row();
         if(role == Qt::DisplayRole)
         {
-            return tr("Label %1").arg(label);
+            return label == 0 ? tr("Clear (Eraser)") : tr("Label %1").arg(label);
         }
         if(role == Qt::UserRole)
         {
@@ -97,6 +97,10 @@ public:
         }
         if(role == Qt::DecorationRole)
         {
+            if(label == 0)
+            {
+                return svgIcon(QStringLiteral(":/icons/erase.svg"));
+            }
             const std::uint32_t packed = core::defaultLabelColor(
                 static_cast<std::uint16_t>(label));
             return QColor(
@@ -1072,6 +1076,7 @@ ViewerToolbox::ViewerToolbox(QWidget* parent)
     activeLabelCombo_->setToolTip(
         tr("Press 1–9 to paint with that label, or 0 to erase"));
     activeLabelCombo_->setModel(new LabelPaletteModel(activeLabelCombo_));
+    activeLabelCombo_->setCurrentIndex(1);
     activeLabelCombo_->setMaxVisibleItems(16);
     activeLabelLayout->addWidget(activeLabelColorSwatch_);
     activeLabelLayout->addWidget(activeLabelCombo_, 1);
@@ -1115,9 +1120,25 @@ ViewerToolbox::ViewerToolbox(QWidget* parent)
             return;
         }
         const int label = activeLabelCombo_->itemData(index).toInt();
-        const QColor color = labelColor(label);
-        activeLabelColorSwatch_->setStyleSheet(
-            QStringLiteral("background-color: %1;").arg(color.name()));
+        if(label == 0)
+        {
+            activeLabelColorSwatch_->setStyleSheet(
+                QStringLiteral("background-color: transparent;"));
+        }
+        else
+        {
+            const QColor color = labelColor(label);
+            activeLabelColorSwatch_->setStyleSheet(
+                QStringLiteral("background-color: %1;").arg(color.name()));
+        }
+        const auto radius = brushRadii_.find(label);
+        const int selectedRadius = radius != brushRadii_.end() ? radius->second : 1;
+        const QSignalBlocker spinBlocker(brushRadiusSpin_);
+        const QSignalBlocker sliderBlocker(brushRadiusSlider_);
+        brushRadiusSpin_->setValue(selectedRadius);
+        brushRadiusSlider_->setValue(selectedRadius);
+        emit brushRadiusChanged(selectedRadius);
+        applyPaintOverForActiveLabel();
         emit activeLabelChanged(label);
     };
     connect(
@@ -1130,8 +1151,11 @@ ViewerToolbox::ViewerToolbox(QWidget* parent)
         [this](const int index) {
             if(index >= 0)
             {
-                emit paintOverChanged(
-                    paintOverCombo_->itemData(index).toInt());
+                const int selection = paintOverCombo_->itemData(index).toInt();
+                const int label = activeLabel();
+                paintOverSelections_[label] = selection;
+                emit paintOverChanged(selection);
+                emit paintOverPreferenceChanged(label, selection);
             }
         });
     const auto updateBrushRadius = [this](const int radius) {
@@ -1139,7 +1163,10 @@ ViewerToolbox::ViewerToolbox(QWidget* parent)
         const QSignalBlocker sliderBlocker(brushRadiusSlider_);
         brushRadiusSpin_->setValue(radius);
         brushRadiusSlider_->setValue(radius);
+        const int label = activeLabel();
+        brushRadii_[label] = radius;
         emit brushRadiusChanged(radius);
+        emit brushRadiusPreferenceChanged(label, radius);
     };
     connect(
         brushRadiusSpin_, &QSpinBox::valueChanged,
@@ -1733,8 +1760,6 @@ void ViewerToolbox::setAnnotationLabels(const QList<int>& labels)
         std::unique(sortedLabels.begin(), sortedLabels.end()),
         sortedLabels.end());
 
-    const int previousPaintOver = paintOverCombo_->currentData().toInt();
-
     {
         const QSignalBlocker paintOverBlocker(paintOverCombo_);
         paintOverCombo_->clear();
@@ -1745,21 +1770,17 @@ void ViewerToolbox::setAnnotationLabels(const QList<int>& labels)
             paintOverCombo_->addItem(
                 labelIcon(label), tr("Label %1").arg(label), label);
         }
-        const int retainedPaintOver = paintOverCombo_->findData(previousPaintOver);
-        paintOverCombo_->setCurrentIndex(
-            retainedPaintOver >= 0 ? retainedPaintOver : 0);
     }
-
-    emit paintOverChanged(paintOverCombo_->currentData().toInt());
+    applyPaintOverForActiveLabel();
 }
 
 void ViewerToolbox::setActiveLabel(const int label)
 {
-    if(!activeLabelCombo_->isEnabled() || label < 1 || label > 65535)
+    if(!activeLabelCombo_->isEnabled() || label < 0 || label > 65535)
     {
         return;
     }
-    const int index = label - 1;
+    const int index = label;
     if(activeLabelCombo_->currentIndex() != index)
     {
         activeLabelCombo_->setCurrentIndex(index);
@@ -1769,6 +1790,53 @@ void ViewerToolbox::setActiveLabel(const int label)
 int ViewerToolbox::activeLabel() const
 {
     return activeLabelCombo_->currentData().toInt();
+}
+
+void ViewerToolbox::setBrushRadii(const std::map<int, int>& radii)
+{
+    brushRadii_.clear();
+    for(const auto& [label, radius] : radii)
+    {
+        if(label >= 0 && label <= 65535 && radius >= 1 && radius <= 100)
+        {
+            brushRadii_[label] = radius;
+        }
+    }
+    const auto selected = brushRadii_.find(activeLabel());
+    const int radius = selected != brushRadii_.end() ? selected->second : 1;
+    const QSignalBlocker spinBlocker(brushRadiusSpin_);
+    const QSignalBlocker sliderBlocker(brushRadiusSlider_);
+    brushRadiusSpin_->setValue(radius);
+    brushRadiusSlider_->setValue(radius);
+    emit brushRadiusChanged(radius);
+}
+
+void ViewerToolbox::setPaintOverSelections(
+    const std::map<int, int>& selections)
+{
+    paintOverSelections_.clear();
+    for(const auto& [label, selection] : selections)
+    {
+        if(label >= 0 && label <= 65535
+           && selection >= -1 && selection <= 65535)
+        {
+            paintOverSelections_[label] = selection;
+        }
+    }
+    applyPaintOverForActiveLabel();
+}
+
+void ViewerToolbox::applyPaintOverForActiveLabel()
+{
+    const auto selected = paintOverSelections_.find(activeLabel());
+    const int desired =
+        selected != paintOverSelections_.end() ? selected->second : -1;
+    const int index = paintOverCombo_->findData(desired);
+    {
+        const QSignalBlocker blocker(paintOverCombo_);
+        paintOverCombo_->setCurrentIndex(index >= 0 ? index : 0);
+    }
+    emit paintOverChanged(paintOverCombo_->currentData().toInt());
 }
 
 void ViewerToolbox::adjustBrushRadius(const int delta)
