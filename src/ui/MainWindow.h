@@ -150,6 +150,7 @@ private:
     void setImageDependentActionsEnabled(bool enabled);
     void updateViewerShortcutActions();
     void updateActiveLabelActions();
+    void updateSaveAnnotationAction();
     void activateAnnotationDigit(int digit);
     [[nodiscard]] bool ensureEditableAnnotationForShortcut();
     [[nodiscard]] bool canUseAnnotationDigitShortcuts() const;

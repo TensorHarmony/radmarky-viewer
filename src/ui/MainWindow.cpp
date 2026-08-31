@@ -1398,7 +1398,7 @@ MainWindow::MainWindow(QWidget* parent)
             brushAction_->setEnabled(editable);
             eraseAction_->setEnabled(editable);
             scopedEraseAction_->setEnabled(editable);
-            saveAnnotationAction_->setEnabled(editable);
+            updateSaveAnnotationAction();
             saveAnnotationAsAction_->setEnabled(editable);
             validateAnnotationAction_->setEnabled(editable);
             undoEditAction_->setEnabled(editable && canUndo);
@@ -2031,6 +2031,7 @@ bool MainWindow::saveAnnotationTo(
             }
         }
         annotation->markSaved();
+        updateSaveAnnotationAction();
         statusBar()->showMessage(
             tr("Saved annotation to %1").arg(
                 QDir::toNativeSeparators(destinationPath)),
@@ -2155,6 +2156,17 @@ void MainWindow::updateActiveLabelActions()
     {
         action->setEnabled(enabled);
     }
+}
+
+void MainWindow::updateSaveAnnotationAction()
+{
+    if(saveAnnotationAction_ == nullptr)
+    {
+        return;
+    }
+    const auto annotation = selectedEditableAnnotation();
+    saveAnnotationAction_->setEnabled(
+        annotation != nullptr && annotation->isModified());
 }
 
 bool MainWindow::canUseAnnotationDigitShortcuts() const
