@@ -243,6 +243,19 @@ int main()
             valueAtIndex(geometry.physicalToContinuousIndex(verticalPoint)),
             "positive vertical screen direction");
 
+        auto inPlaneCursor = centerPhysical;
+        const auto& horizontal = slice.horizontalDirectionLps();
+        for(std::size_t axis = 0; axis < 3; ++axis)
+        {
+            inPlaneCursor[axis] += horizontal[axis];
+        }
+        const auto unchangedPlaneMTime = reslice->GetMTime();
+        radmarky::rendering::setOrthogonalResliceCursor(
+            *reslice, slice, inPlaneCursor);
+        passed &= expectTrue(
+            reslice->GetMTime() == unchangedPlaneMTime,
+            "in-plane cursor motion keeps reslice pipeline current");
+
         auto movedCursor = centerPhysical;
         const auto& normal = slice.normalDirectionLps();
         for(std::size_t axis = 0; axis < 3; ++axis)
@@ -251,6 +264,9 @@ int main()
         }
         radmarky::rendering::setOrthogonalResliceCursor(
             *reslice, slice, movedCursor);
+        passed &= expectTrue(
+            reslice->GetMTime() > unchangedPlaneMTime,
+            "normal cursor motion invalidates reslice pipeline");
         reslice->Update();
         const auto movedIndex = geometry.physicalToContinuousIndex(
             slice.pointOnCursorPlane(0.0, 0.0, movedCursor));

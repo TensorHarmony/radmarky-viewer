@@ -776,9 +776,31 @@ void VtkViewport::annotationDataModified(const std::size_t index)
     {
         throw std::out_of_range("Annotation index is out of range");
     }
+    const bool profiling = renderProfilingEnabled();
+    QElapsedTimer timer;
+    if(profiling)
+    {
+        timer.start();
+    }
     impl_->annotations[index].reslice->Modified();
     impl_->annotations[index].reslice->Update();
+    const qint64 updateMicroseconds = profiling
+        ? timer.nsecsElapsed() / 1000 : 0;
     impl_->renderWindow->Render();
+    if(profiling)
+    {
+        const qint64 totalMicroseconds = timer.nsecsElapsed() / 1000;
+        qInfo().noquote()
+            << QStringLiteral(
+                   "[PROFILE] annotation_update orientation=%1 index=%2 "
+                   "overlays=%3 update_us=%4 render_us=%5 total_us=%6")
+                   .arg(QString::fromLatin1(orientationTitle(impl_->orientation)))
+                   .arg(static_cast<qulonglong>(index))
+                   .arg(static_cast<qulonglong>(impl_->annotations.size()))
+                   .arg(updateMicroseconds)
+                   .arg(totalMicroseconds - updateMicroseconds)
+                   .arg(totalMicroseconds);
+    }
 }
 
 void VtkViewport::setAnnotationComparison(
@@ -936,7 +958,8 @@ void VtkViewport::setCursor(
         impl_->sliceGeometry->normalCoordinate(impl_->cursorPhysical);
     const double nextSlice =
         impl_->sliceGeometry->normalCoordinate(cursorPhysical);
-    if(std::abs(previousSlice - nextSlice) > 1.0e-6)
+    const bool sliceChanged = std::abs(previousSlice - nextSlice) > 1.0e-6;
+    if(sliceChanged)
     {
         impl_->measurementStartPhysical.reset();
         impl_->measurementEndPhysical.reset();
@@ -944,24 +967,30 @@ void VtkViewport::setCursor(
         impl_->measurementLabelActor->SetVisibility(false);
     }
     impl_->cursorPhysical = cursorPhysical;
-    setOrthogonalResliceCursor(
-        *impl_->reslice, *impl_->sliceGeometry, cursorPhysical);
-    for(auto& annotation : impl_->annotations)
+    if(sliceChanged)
     {
         setOrthogonalResliceCursor(
-            *annotation.reslice, *impl_->sliceGeometry, cursorPhysical);
-    }
-    if(impl_->annotationComparison)
-    {
-        setOrthogonalResliceCursor(
-            *impl_->annotationComparison->reslice,
-            *impl_->sliceGeometry,
-            cursorPhysical);
+            *impl_->reslice, *impl_->sliceGeometry, cursorPhysical);
+        for(auto& annotation : impl_->annotations)
+        {
+            setOrthogonalResliceCursor(
+                *annotation.reslice, *impl_->sliceGeometry, cursorPhysical);
+        }
+        if(impl_->annotationComparison)
+        {
+            setOrthogonalResliceCursor(
+                *impl_->annotationComparison->reslice,
+                *impl_->sliceGeometry,
+                cursorPhysical);
+        }
     }
     const qint64 pipelineMicroseconds = profiling
         ? timer.nsecsElapsed() / 1000 : 0;
     updateCrosshair();
-    impl_->renderer->ResetCameraClippingRange();
+    if(sliceChanged)
+    {
+        impl_->renderer->ResetCameraClippingRange();
+    }
     const qint64 overlayMicroseconds = profiling
         ? timer.nsecsElapsed() / 1000 - pipelineMicroseconds : 0;
     impl_->renderWindow->Render();
@@ -971,10 +1000,12 @@ void VtkViewport::setCursor(
         qInfo().noquote()
             << QStringLiteral(
                    "[PROFILE] viewport_cursor orientation=%1 overlays=%2 "
-                   "props=%3 pipeline_us=%4 overlay_us=%5 render_us=%6 total_us=%7")
+                   "props=%3 slice_changed=%4 pipeline_us=%5 overlay_us=%6 "
+                   "render_us=%7 total_us=%8")
                    .arg(QString::fromLatin1(orientationTitle(impl_->orientation)))
                    .arg(static_cast<qulonglong>(impl_->annotations.size()))
                    .arg(impl_->renderer->GetViewProps()->GetNumberOfItems())
+                   .arg(sliceChanged ? 1 : 0)
                    .arg(pipelineMicroseconds)
                    .arg(overlayMicroseconds)
                    .arg(totalMicroseconds - pipelineMicroseconds

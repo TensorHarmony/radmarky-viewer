@@ -73,7 +73,9 @@ void setOrthogonalResliceCursor(
 {
     const auto planeOrigin = slice.planeOriginForCursor(cursorPhysical);
     reslice.SetResliceAxesOrigin(planeOrigin.data());
-    reslice.Modified();
+    // SetResliceAxesOrigin marks the filter modified when the origin changes.
+    // Do not invalidate the reslice for cursor motion within the same plane;
+    // that motion only changes the crosshair in the viewport.
 }
 
 } // namespace radmarky::rendering

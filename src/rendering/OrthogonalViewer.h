@@ -61,6 +61,7 @@ public:
     void redoAnnotationEdit();
     void zoomAllIn();
     void zoomAllOut();
+    void stepActiveViewSlice(int steps);
     void panActiveView(double horizontalDirection, double verticalDirection);
     void resetActiveView();
     void resetAllViews();

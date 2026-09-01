@@ -1241,6 +1241,12 @@ void OrthogonalViewer::zoomAllOut()
     }
 }
 
+void OrthogonalViewer::stepActiveViewSlice(const int steps)
+{
+    stepSlice(
+        impl_->focusedView.value_or(impl_->inspectionOrientation), steps);
+}
+
 void OrthogonalViewer::panActiveView(
     const double horizontalDirection,
     const double verticalDirection)

@@ -72,6 +72,10 @@ int main(int argc, char* argv[])
                       QStringLiteral("Pan")),
         "keyboard pan shortcut");
     passed &= expectTrue(
+        tableContains(*table, QStringLiteral("Page Up / Page Down"),
+                      QStringLiteral("slices")),
+        "keyboard slice shortcut");
+    passed &= expectTrue(
         tableContains(*table, QStringLiteral("F"), QStringLiteral("fit")),
         "fit shortcut");
     passed &= expectTrue(

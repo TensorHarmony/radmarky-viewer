@@ -93,6 +93,8 @@ ShortcutsDialog::ShortcutsDialog(QWidget* const parent)
                     tr("Hide or show all annotation overlays")},
         ShortcutRow{tr("Keyboard"), tr("W / A / S / D"), tr("Active view"),
                     tr("Pan up, left, down, or right")},
+        ShortcutRow{tr("Keyboard"), tr("Page Up / Page Down"),
+                    tr("Active view"), tr("Move through slices")},
         ShortcutRow{tr("Keyboard"), tr("F"), tr("Active view"),
                     tr("Center and fit the image")},
         ShortcutRow{tr("Keyboard"),

@@ -1047,6 +1047,24 @@ MainWindow::MainWindow(QWidget* parent)
     addPanShortcut(
         tr("Pan active view right"), QStringLiteral("panViewRightAction"),
         Qt::Key_D, 1.0, 0.0);
+    auto* const previousSliceAction =
+        viewMenu->addAction(tr("Previous slice in active view"));
+    previousSliceAction->setObjectName(
+        QStringLiteral("previousActiveViewSliceAction"));
+    previousSliceAction->setShortcut(QKeySequence(Qt::Key_PageUp));
+    connect(previousSliceAction, &QAction::triggered, this, [this] {
+        viewer_->stepActiveViewSlice(1);
+    });
+    viewerShortcutActions_.push_back(previousSliceAction);
+    auto* const nextSliceAction =
+        viewMenu->addAction(tr("Next slice in active view"));
+    nextSliceAction->setObjectName(
+        QStringLiteral("nextActiveViewSliceAction"));
+    nextSliceAction->setShortcut(QKeySequence(Qt::Key_PageDown));
+    connect(nextSliceAction, &QAction::triggered, this, [this] {
+        viewer_->stepActiveViewSlice(-1);
+    });
+    viewerShortcutActions_.push_back(nextSliceAction);
     auto* const fitActiveViewAction = viewMenu->addAction(tr("Fit active view"));
     fitActiveViewAction->setObjectName(QStringLiteral("fitActiveViewAction"));
     fitActiveViewAction->setShortcut(QKeySequence(Qt::Key_F));
