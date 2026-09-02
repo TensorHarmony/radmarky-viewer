@@ -133,6 +133,15 @@ int main()
     passed &= expectTrue(
         hasIssue(missingAnalysis, DicomGeometryIssueKind::MissingSlices),
         "missing slice gap rejected");
+    passed &= expectTrue(
+        missingAnalysis.canOverrideMissingSlices()
+            && missingAnalysis.canOverrideSliceSpacing(),
+        "isolated missing slice gap can be overridden");
+    passed &= expectTrue(
+        radmarky::io::dicomGeometryIssueCode(
+            DicomGeometryIssueKind::MissingSlices)
+            == "DICOM_GEOMETRY_MISSING_SLICES",
+        "missing slice error code is stable");
 
     std::vector irregular{
         recordAt(0.0, 0.0, 30),

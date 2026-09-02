@@ -81,13 +81,17 @@ DicomSeriesCandidate makeCandidate(
             std::abs(*first.spacingBetweenSlices);
     }
     candidate.gantryTilt = geometry.gantryTilt;
+    candidate.missingSlicesOverrideAllowed = geometry.canOverrideMissingSlices();
     candidate.nonUniformSpacingOverrideAllowed =
         geometry.canOverrideNonUniformSpacing();
     candidate.spacingMetadataMismatchOverrideAllowed =
         geometry.canOverrideSpacingMetadataMismatch();
+    candidate.consistencyIssueCodes.reserve(geometry.diagnostics.size());
     candidate.consistencyIssues.reserve(geometry.diagnostics.size());
     for(const auto& diagnostic : geometry.diagnostics)
     {
+        candidate.consistencyIssueCodes.emplace_back(
+            dicomGeometryIssueCode(diagnostic.kind));
         candidate.consistencyIssues.push_back(diagnostic.message);
     }
     return candidate;

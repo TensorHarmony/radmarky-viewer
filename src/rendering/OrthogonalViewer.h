@@ -103,6 +103,8 @@ signals:
         const QString& x,
         const QString& y,
         const QString& z,
+        const QString& previousSpacing,
+        const QString& nextSpacing,
         const QString& intensity,
         const QString& maximumIntensity,
         const QString& meanIntensity,

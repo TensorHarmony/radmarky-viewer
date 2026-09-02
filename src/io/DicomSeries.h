@@ -42,11 +42,13 @@ struct DicomSeriesCandidate
     std::optional<std::size_t> columns;
     std::size_t sliceCount = 0;
     std::optional<double> sliceSpacingMillimetres;
+    std::vector<std::string> consistencyIssueCodes;
     std::vector<std::string> consistencyIssues;
     std::string detectionNote;
     std::size_t partNumber = 1;
     std::size_t partCount = 1;
     bool gantryTilt = false;
+    bool missingSlicesOverrideAllowed = false;
     bool nonUniformSpacingOverrideAllowed = false;
     bool spacingMetadataMismatchOverrideAllowed = false;
 
@@ -57,7 +59,8 @@ struct DicomSeriesCandidate
 
     [[nodiscard]] bool importable() const noexcept
     {
-        return consistent() || nonUniformSpacingOverrideAllowed
+        return consistent() || missingSlicesOverrideAllowed
+            || nonUniformSpacingOverrideAllowed
             || spacingMetadataMismatchOverrideAllowed;
     }
 };

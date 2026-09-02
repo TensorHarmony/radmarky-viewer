@@ -217,6 +217,20 @@ QString formatSampledValue(const double value)
     return QString::number(value, integral ? 'f' : 'g', integral ? 0 : 6);
 }
 
+QString formatSliceGap(
+    const std::vector<double>& gaps,
+    const std::size_t sliceIndex,
+    const bool previous)
+{
+    if((previous && (sliceIndex == 0 || sliceIndex > gaps.size()))
+       || (!previous && sliceIndex >= gaps.size()))
+    {
+        return QStringLiteral("—");
+    }
+    const std::size_t gapIndex = previous ? sliceIndex - 1 : sliceIndex;
+    return QStringLiteral("%1 mm").arg(gaps[gapIndex], 0, 'f', 3);
+}
+
 QString formatAnnotationInspection(
     const core::Annotation& annotation,
     const core::ImageGeometry::Vector& point)
@@ -563,6 +577,8 @@ void OrthogonalViewer::inspectPhysicalPoint(
             QStringLiteral("—"),
             QStringLiteral("—"),
             QStringLiteral("—"),
+            QStringLiteral("—"),
+            QStringLiteral("—"),
             QStringLiteral("0"),
             tr("Clear Label"),
             annotationNames,
@@ -640,10 +656,14 @@ void OrthogonalViewer::inspectPhysicalPoint(
         orientation == core::SliceOrientation::Axial && impl_->state
         ? static_cast<std::size_t>(currentAxialSlice(*impl_->state))
         : sample->index[2] + 1;
+    const auto& sliceGaps = impl_->volume->dicomSliceGapsMillimetres();
+    const std::size_t inspectedSliceIndex = inspectedAxialSlice - 1;
     emit cursorInspectionChanged(
         QString::number(static_cast<qulonglong>(sample->index[0])),
         QString::number(static_cast<qulonglong>(sample->index[1])),
         QString::number(static_cast<qulonglong>(inspectedAxialSlice)),
+        formatSliceGap(sliceGaps, inspectedSliceIndex, true),
+        formatSliceGap(sliceGaps, inspectedSliceIndex, false),
         formattedValue,
         formattedMaximum,
         formattedMean,

@@ -163,6 +163,27 @@ void Volume::setDicomMetadata(std::vector<DicomMetadataEntry> metadata)
     dicomMetadata_ = std::move(metadata);
 }
 
+const std::vector<double>& Volume::dicomSliceGapsMillimetres() const noexcept
+{
+    return dicomSliceGapsMillimetres_;
+}
+
+void Volume::setDicomSliceGapsMillimetres(std::vector<double> gaps)
+{
+    const auto sliceCount = geometry_.dimensions()[2];
+    if(!gaps.empty()
+       && (sliceCount < 2 || gaps.size() != sliceCount - 1
+           || std::any_of(gaps.begin(), gaps.end(), [](const double gap) {
+                  return !std::isfinite(gap) || gap <= 0.0;
+              })))
+    {
+        throw std::invalid_argument(
+            "DICOM slice gaps must contain one positive finite value between "
+            "each pair of volume slices");
+    }
+    dicomSliceGapsMillimetres_ = std::move(gaps);
+}
+
 std::optional<Volume::VoxelSample> Volume::sampleNearestPhysical(
     const ImageGeometry::Vector& point) const
 {

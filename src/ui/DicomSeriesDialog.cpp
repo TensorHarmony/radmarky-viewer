@@ -45,6 +45,18 @@ QString joinedIssues(const io::DicomSeriesCandidate& candidate)
     return issues.join(QStringLiteral("; "));
 }
 
+QString joinedIssueCodes(const io::DicomSeriesCandidate& candidate)
+{
+    QStringList codes;
+    codes.reserve(static_cast<qsizetype>(candidate.consistencyIssueCodes.size()));
+    for(const auto& code : candidate.consistencyIssueCodes)
+    {
+        codes.push_back(QString::fromStdString(code));
+    }
+    return codes.empty() ? QStringLiteral("—")
+                         : codes.join(QStringLiteral("; "));
+}
+
 QString candidateDescription(const io::DicomSeriesCandidate& candidate)
 {
     QString description = candidate.seriesDescription.empty()
@@ -95,7 +107,7 @@ public:
 
     [[nodiscard]] int columnCount(const QModelIndex& parent = {}) const override
     {
-        return parent.isValid() ? 0 : 7;
+        return parent.isValid() ? 0 : 8;
     }
 
     [[nodiscard]] QVariant data(
@@ -140,6 +152,13 @@ public:
                     ? tr("%1 mm").arg(*candidate.sliceSpacingMillimetres, 0, 'f', 3)
                     : tr("Unknown");
             case 6:
+                return joinedIssueCodes(candidate);
+            case 7:
+                if(candidate.missingSlicesOverrideAllowed)
+                {
+                    return tr("Warning: one or more slices appear to be missing "
+                              "(override available)");
+                }
                 if(candidate.nonUniformSpacingOverrideAllowed)
                 {
                     return tr("Warning: non-uniform spacing (override available)");
@@ -181,9 +200,11 @@ public:
             }
             return details;
         }
-        if(role == Qt::ForegroundRole && index.column() == 6)
+        if(role == Qt::ForegroundRole
+           && (index.column() == 6 || index.column() == 7))
         {
-            if(candidate.nonUniformSpacingOverrideAllowed
+            if(candidate.missingSlicesOverrideAllowed
+               || candidate.nonUniformSpacingOverrideAllowed
                || candidate.spacingMetadataMismatchOverrideAllowed)
             {
                 return QColor(176, 101, 0);
@@ -218,6 +239,8 @@ public:
         case 5:
             return tr("Slice spacing");
         case 6:
+            return tr("Error code");
+        case 7:
             return tr("Consistency");
         default:
             return {};
@@ -301,10 +324,10 @@ DicomSeriesDialog::DicomSeriesDialog(
     auto* const explanation = new QLabel(
         tr("The DICOM input has been separated into candidate image stacks. "
            "Review their resolution, measured slice spacing, and consistency, "
-           "then select one series to import. A series with only non-uniform slice "
-           "spacing, or only a disagreement between declared spacing and uniform "
-           "slice positions, can be imported with confirmation; other inconsistent "
-           "rows cannot be imported."),
+           "then select one series to import. A series with only missing slices, "
+           "non-uniform slice spacing, or a disagreement between declared spacing "
+           "and uniform slice positions can be imported with confirmation; other "
+           "inconsistent rows cannot be imported."),
         this);
     explanation->setWordWrap(true);
     layout->addWidget(explanation);
@@ -318,14 +341,22 @@ DicomSeriesDialog::DicomSeriesDialog(
     table_ = new QTableView(this);
     table_->setObjectName(QStringLiteral("dicomSeriesTable"));
     table_->setModel(model_);
+    table_->horizontalHeader()->setStretchLastSection(false);
     table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
-    table_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    table_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Interactive);
     table_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Interactive);
-    table_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
+    table_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Interactive);
     table_->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
     table_->horizontalHeader()->setSectionResizeMode(5, QHeaderView::ResizeToContents);
-    table_->horizontalHeader()->setSectionResizeMode(6, QHeaderView::Stretch);
-    table_->setColumnWidth(2, 250);
+    table_->horizontalHeader()->setSectionResizeMode(6, QHeaderView::Interactive);
+    table_->horizontalHeader()->setSectionResizeMode(7, QHeaderView::Interactive);
+    table_->setColumnWidth(1, 200);
+    table_->setColumnWidth(2, 280);
+    table_->setColumnWidth(3, 420);
+    table_->setColumnWidth(6, 290);
+    table_->setColumnWidth(7, 520);
+    table_->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    table_->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
     table_->verticalHeader()->setVisible(false);
     table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     table_->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -383,7 +414,25 @@ DicomSeriesDialog::DicomSeriesDialog(
     importButton_ = buttons->button(QDialogButtonBox::Ok);
     importButton_->setText(tr("Import"));
     connect(buttons, &QDialogButtonBox::accepted, this, [this] {
-        if(selectedSeriesRequiresNonUniformSpacingOverride())
+        if(selectedSeriesRequiresMissingSlicesOverride())
+        {
+            const auto answer = QMessageBox::warning(
+                this,
+                tr("Import Series with Missing Slices?"),
+                tr("One or more expected DICOM image planes appear to be missing. "
+                   "RadMarky will load the available slices on a uniformly spaced "
+                   "3-D grid, but it cannot reconstruct the missing anatomy or "
+                   "preserve every original slice position exactly. Measurements, "
+                   "annotations, and spatial alignment along the slice axis may be "
+                   "inaccurate near each gap.\n\nImport this series anyway?"),
+                QMessageBox::Yes | QMessageBox::No,
+                QMessageBox::No);
+            if(answer != QMessageBox::Yes)
+            {
+                return;
+            }
+        }
+        else if(selectedSeriesRequiresNonUniformSpacingOverride())
         {
             const auto answer = QMessageBox::warning(
                 this,
@@ -469,6 +518,13 @@ bool DicomSeriesDialog::selectedSeriesRequiresNonUniformSpacingOverride() const
         && analysis_.series[*selected].nonUniformSpacingOverrideAllowed;
 }
 
+bool DicomSeriesDialog::selectedSeriesRequiresMissingSlicesOverride() const
+{
+    const auto selected = selectedSeriesIndex();
+    return selected && *selected < analysis_.series.size()
+        && analysis_.series[*selected].missingSlicesOverrideAllowed;
+}
+
 bool DicomSeriesDialog::selectedSeriesRequiresSpacingMetadataMismatchOverride() const
 {
     const auto selected = selectedSeriesIndex();
@@ -478,7 +534,8 @@ bool DicomSeriesDialog::selectedSeriesRequiresSpacingMetadataMismatchOverride() 
 
 bool DicomSeriesDialog::selectedSeriesRequiresSliceSpacingOverride() const
 {
-    return selectedSeriesRequiresNonUniformSpacingOverride()
+    return selectedSeriesRequiresMissingSlicesOverride()
+        || selectedSeriesRequiresNonUniformSpacingOverride()
         || selectedSeriesRequiresSpacingMetadataMismatchOverride();
 }
 

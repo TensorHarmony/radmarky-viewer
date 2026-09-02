@@ -1248,6 +1248,23 @@ ViewerToolbox::ViewerToolbox(QWidget* parent)
     inspectorLayout->addWidget(cursorRow);
 
     inspectorLayout->addWidget(
+        makeCompactLabel(tr("Spacing (previous, next):"), inspectorGroup));
+    auto* const spacingRow = new QWidget(inspectorGroup);
+    auto* const spacingLayout = new QHBoxLayout(spacingRow);
+    spacingLayout->setContentsMargins(0, 0, 0, 0);
+    spacingLayout->setSpacing(6);
+    cursorPreviousSpacing_ = makeReadOnlyField(spacingRow);
+    cursorPreviousSpacing_->setObjectName(
+        QStringLiteral("cursorPreviousSpacingField"));
+    cursorPreviousSpacing_->setAccessibleName(tr("Previous slice gap"));
+    cursorNextSpacing_ = makeReadOnlyField(spacingRow);
+    cursorNextSpacing_->setObjectName(QStringLiteral("cursorNextSpacingField"));
+    cursorNextSpacing_->setAccessibleName(tr("Next slice gap"));
+    spacingLayout->addWidget(cursorPreviousSpacing_);
+    spacingLayout->addWidget(cursorNextSpacing_);
+    inspectorLayout->addWidget(spacingRow);
+
+    inspectorLayout->addWidget(
         makeCompactLabel(tr("Intensity under cursor:"), inspectorGroup));
     auto* const intensityPanel = new IntensityUnderCursorPanel(inspectorGroup);
     cursorIntensityTable_ = intensityPanel;
@@ -1416,6 +1433,8 @@ void ViewerToolbox::setCursorInspection(
     const QString& x,
     const QString& y,
     const QString& z,
+    const QString& previousSpacing,
+    const QString& nextSpacing,
     const QString& intensity,
     const QString& maximumIntensity,
     const QString& meanIntensity,
@@ -1434,6 +1453,8 @@ void ViewerToolbox::setCursorInspection(
     {
         cursorZ_->setText(z);
     }
+    cursorPreviousSpacing_->setText(previousSpacing);
+    cursorNextSpacing_->setText(nextSpacing);
     intensityValue_->setText(intensity);
     maximumIntensityValue_->setText(maximumIntensity);
     meanIntensityValue_->setText(meanIntensity);
@@ -1918,6 +1939,8 @@ void ViewerToolbox::clearVolume()
     cursorInspectorGroup_->setEnabled(false);
     contentStack_->setCurrentIndex(0);
     setCursorInspection(
+        QStringLiteral("—"),
+        QStringLiteral("—"),
         QStringLiteral("—"),
         QStringLiteral("—"),
         QStringLiteral("—"),

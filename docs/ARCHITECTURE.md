@@ -70,7 +70,8 @@ The CMake targets reinforce these boundaries:
 ### Volume and geometry
 
 `core::Volume` owns an `itk::Image<float, 3>`, its scalar range, optional RGB
-display data, and displayable DICOM metadata. The associated
+display data, displayable DICOM metadata, and any measured gaps between the
+ordered source DICOM slice positions. The associated
 `core::ImageGeometry` stores dimensions, spacing, origin, direction, and the
 inverse direction needed for coordinate conversion.
 
@@ -175,13 +176,18 @@ clipboard; the Series Description and Series Instance UID cells can be copied
 the same way. Unreadable files and DICOM objects without a Series Instance UID
 are listed as ignored; candidates not chosen by the user are left behind.
 Inconsistent candidates remain visible for diagnosis and cannot normally be
-selected. An explicit override is available when the candidate's only problem
-is either non-uniform distance between otherwise collinear slice positions, or
-a uniform position-derived spacing that disagrees with the declared Spacing
+selected. The table includes stable textual geometry error codes and scrolls
+horizontally to keep every diagnostic reachable. An explicit override is
+available when the candidate's only problem is a gap consistent with missing
+slices, non-uniform distance between otherwise collinear slice positions, or a
+uniform position-derived spacing that disagrees with the declared Spacing
 Between Slices value. Such candidates remain unselected by default, are shown
-as warnings, and can be imported only after confirmation. A non-uniform stack
-is represented by an ITK volume with one uniform slice-axis spacing, so that
-override cannot preserve every original slice position exactly.
+as warnings, and can be imported only after confirmation. A non-uniform or
+missing-slice stack is represented by an ITK volume with one uniform
+slice-axis spacing, so the override cannot preserve every original slice
+position exactly or reconstruct missing anatomy. The cursor inspector reports
+the preserved source gap to the previous and next slice, allowing an imported
+spacing anomaly to remain visible even though the output grid is uniform.
 
 Classic multi-file DICOM stacks are ordered by Image Position (Patient)
 projected onto the normal formed from Image Orientation (Patient). A stack must
@@ -198,7 +204,8 @@ The importer rejects:
   through the explicit override described above
 - mixed or partially missing Frame of Reference UIDs
 - duplicate SOP Instance UIDs or duplicate slice positions
-- gaps consistent with missing slices
+- gaps consistent with missing slices; this issue can be imported only through
+  the explicit missing-slice override described above
 - irregular spacing or inconsistent stack direction; isolated non-uniform
   spacing can be imported only through the explicit override described above
 

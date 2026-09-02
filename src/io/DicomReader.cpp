@@ -402,7 +402,13 @@ void populateRecord(
     }
 }
 
-std::vector<std::string> orderedFileNames(
+struct OrderedDicomInput
+{
+    std::vector<std::string> names;
+    std::vector<double> sliceGapsMillimetres;
+};
+
+OrderedDicomInput orderedDicomInput(
     const std::vector<DicomFileRecord>& records,
     const DicomReadGeometryPolicy geometryPolicy)
 {
@@ -417,13 +423,32 @@ std::vector<std::string> orderedFileNames(
             + formatDicomGeometryDiagnostics(geometry));
     }
 
-    std::vector<std::string> names;
-    names.reserve(records.size());
+    OrderedDicomInput input;
+    input.names.reserve(records.size());
     for(const auto index : geometry.orderedIndices)
     {
-        names.push_back(pathForMedicalIo(records[index].filePath));
+        input.names.push_back(pathForMedicalIo(records[index].filePath));
     }
-    return names;
+    if(records.size() > 1 && geometry.completeSpatialGeometry)
+    {
+        input.sliceGapsMillimetres.reserve(records.size() - 1);
+        for(std::size_t ordered = 1; ordered < geometry.orderedIndices.size();
+            ++ordered)
+        {
+            const auto& previous = *records[geometry.orderedIndices[ordered - 1]]
+                                        .imagePositionPatient;
+            const auto& current = *records[geometry.orderedIndices[ordered]]
+                                       .imagePositionPatient;
+            double squaredDistance = 0.0;
+            for(std::size_t axis = 0; axis < 3; ++axis)
+            {
+                const double difference = current[axis] - previous[axis];
+                squaredDistance += difference * difference;
+            }
+            input.sliceGapsMillimetres.push_back(std::sqrt(squaredDistance));
+        }
+    }
+    return input;
 }
 
 using VolumeImage = core::Volume::ImageType;
@@ -982,8 +1007,9 @@ std::shared_ptr<core::Volume> DicomReader::read(
 
     try
     {
-        const auto orderedNames = orderedFileNames(records, geometryPolicy);
-        auto readResult = readParallelSlices(orderedNames, progress, cancelled);
+        const auto orderedInput = orderedDicomInput(records, geometryPolicy);
+        auto readResult =
+            readParallelSlices(orderedInput.names, progress, cancelled);
         if(timings != nullptr)
         {
             timings->geometrySetupMilliseconds =
@@ -998,11 +1024,16 @@ std::shared_ptr<core::Volume> DicomReader::read(
                   std::move(readResult.image), *readResult.scalarRange)
             : std::make_shared<core::Volume>(std::move(readResult.image));
         if(auto rgb = readPaletteColorDisplay(
-               orderedNames,
+               orderedInput.names,
                volume->image().GetLargestPossibleRegion().GetNumberOfPixels(),
                cancelled))
         {
             volume->setDisplayRgb(std::move(*rgb));
+        }
+        if(!orderedInput.sliceGapsMillimetres.empty())
+        {
+            volume->setDicomSliceGapsMillimetres(
+                orderedInput.sliceGapsMillimetres);
         }
         if(timings != nullptr)
         {
@@ -1011,7 +1042,7 @@ std::shared_ptr<core::Volume> DicomReader::read(
         }
         throwIfCancelled(cancelled);
         const auto metadataStart = Clock::now();
-        volume->setDicomMetadata(readDicomMetadata(orderedNames.front()));
+        volume->setDicomMetadata(readDicomMetadata(orderedInput.names.front()));
         if(timings != nullptr)
         {
             timings->metadataMilliseconds = elapsedMilliseconds(metadataStart);

@@ -2,6 +2,7 @@
 
 #include <QApplication>
 #include <QComboBox>
+#include <QLineEdit>
 
 #include <iostream>
 #include <string_view>
@@ -31,18 +32,49 @@ int main(int argc, char* argv[])
     toolbox.setAnnotationEditingState(true, false, false);
     toolbox.setAnnotationLabels({4, 2, 4});
     toolbox.setPaintOverSelections({{0, 0}, {4, 0}});
+    toolbox.setCursorInspection(
+        QStringLiteral("10"),
+        QStringLiteral("20"),
+        QStringLiteral("159"),
+        QStringLiteral("2.500 mm"),
+        QStringLiteral("5.000 mm"),
+        QStringLiteral("42"),
+        QStringLiteral("50"),
+        QStringLiteral("40"),
+        QStringLiteral("41"),
+        QStringLiteral("30"),
+        QStringLiteral("0"),
+        QStringLiteral("Clear Label"),
+        {},
+        {},
+        553);
 
     auto* const activeLabel =
         toolbox.findChild<QComboBox*>(QStringLiteral("activeLabelCombo"));
     auto* const paintOver =
         toolbox.findChild<QComboBox*>(QStringLiteral("paintOverCombo"));
+    auto* const previousSpacing = toolbox.findChild<QLineEdit*>(
+        QStringLiteral("cursorPreviousSpacingField"));
+    auto* const nextSpacing = toolbox.findChild<QLineEdit*>(
+        QStringLiteral("cursorNextSpacingField"));
     bool passed = true;
     passed &= expect(activeLabel != nullptr, "active-label combo exists");
     passed &= expect(paintOver != nullptr, "paint-over combo exists");
-    if(activeLabel == nullptr || paintOver == nullptr)
+    passed &= expect(
+        previousSpacing != nullptr, "previous-spacing inspector field exists");
+    passed &=
+        expect(nextSpacing != nullptr, "next-spacing inspector field exists");
+    if(activeLabel == nullptr || paintOver == nullptr || previousSpacing == nullptr
+       || nextSpacing == nullptr)
     {
         return 1;
     }
+    passed &= expect(
+        previousSpacing->text() == QStringLiteral("2.500 mm"),
+        "previous source gap displayed");
+    passed &= expect(
+        nextSpacing->text() == QStringLiteral("5.000 mm"),
+        "next source gap displayed");
 
     toolbox.setActiveLabel(0);
     passed &= expect(toolbox.activeLabel() == 0, "eraser becomes active");

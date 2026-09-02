@@ -215,6 +215,16 @@ int main()
         missingSliceAnalysis.series.size() == 1
             && !missingSliceAnalysis.series.front().consistent(),
         "missing slice is reported instead of being split into healthy fragments");
+    passed &= expectTrue(
+        missingSliceAnalysis.series.front().missingSlicesOverrideAllowed
+            && missingSliceAnalysis.series.front().importable()
+            && missingSliceAnalysis.series.front().consistencyIssueCodes
+                == std::vector<std::string>{"DICOM_GEOMETRY_MISSING_SLICES"},
+        "missing slice candidate exposes error code and manual override");
+    passed &= expectFalse(
+        missingSliceAnalysis.proposedSeriesIndex.has_value()
+            || missingSliceAnalysis.canAutomaticallyImport(),
+        "missing slice override requires review and explicit selection");
 
     const std::vector irregularSpacing{
         recordAt("i0", "8.8.8", 0.0, 70),

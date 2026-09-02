@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace radmarky::io
@@ -52,6 +53,12 @@ struct DicomGeometryAnalysis
                 == DicomGeometryIssueKind::NonUniformSpacing;
     }
 
+    [[nodiscard]] bool canOverrideMissingSlices() const noexcept
+    {
+        return diagnostics.size() == 1
+            && diagnostics.front().kind == DicomGeometryIssueKind::MissingSlices;
+    }
+
     [[nodiscard]] bool canOverrideSpacingMetadataMismatch() const noexcept
     {
         return diagnostics.size() == 1
@@ -61,10 +68,13 @@ struct DicomGeometryAnalysis
 
     [[nodiscard]] bool canOverrideSliceSpacing() const noexcept
     {
-        return canOverrideNonUniformSpacing()
+        return canOverrideMissingSlices() || canOverrideNonUniformSpacing()
             || canOverrideSpacingMetadataMismatch();
     }
 };
+
+[[nodiscard]] std::string_view dicomGeometryIssueCode(
+    DicomGeometryIssueKind kind) noexcept;
 
 [[nodiscard]] DicomGeometryAnalysis analyzeDicomGeometry(
     const std::vector<DicomFileRecord>& records);

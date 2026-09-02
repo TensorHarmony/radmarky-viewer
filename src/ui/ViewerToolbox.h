@@ -38,6 +38,8 @@ public:
         const QString& x,
         const QString& y,
         const QString& z,
+        const QString& previousSpacing,
+        const QString& nextSpacing,
         const QString& intensity,
         const QString& maximumIntensity,
         const QString& meanIntensity,
@@ -112,6 +114,8 @@ private:
     QLineEdit* cursorX_ = nullptr;
     QLineEdit* cursorY_ = nullptr;
     QLineEdit* cursorZ_ = nullptr;
+    QLineEdit* cursorPreviousSpacing_ = nullptr;
+    QLineEdit* cursorNextSpacing_ = nullptr;
     QIntValidator* cursorSliceValidator_ = nullptr;
     QLabel* intensityValue_ = nullptr;
     QLabel* maximumIntensityValue_ = nullptr;

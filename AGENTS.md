@@ -121,7 +121,8 @@ the two Image Orientation direction cosines. It rejects:
 - changing dimensions, pixel spacing, or Spacing Between Slices metadata
 - mixed or partially missing Frame of Reference UIDs
 - repeated SOP Instance UIDs or duplicate slice positions
-- gaps consistent with missing slices
+- gaps consistent with missing slices unless the user explicitly accepts the
+  missing-slice override
 - non-uniform spacing
 - slice positions that do not follow one consistent stack direction
 
@@ -129,11 +130,15 @@ A uniform gantry tilt is accepted and preserved. A single DICOM file is left
 to GDCM/ITK because it may be a valid multi-frame object whose per-frame
 geometry is stored in functional groups.
 
-The import dialog offers an explicit override when the only issue is either
-non-uniform distance between otherwise collinear slice positions or a uniform
-position-derived spacing that disagrees with the declared Spacing Between
-Slices value. Changing, invalid, or partially missing spacing metadata remains
-a hard rejection.
+The import dialog offers an explicit override when the only issue is a gap
+consistent with missing slices, non-uniform distance between otherwise
+collinear slice positions, or a uniform position-derived spacing that
+disagrees with the declared Spacing Between Slices value. Changing, invalid,
+or partially missing spacing metadata remains a hard rejection. Overrideable
+candidates always require review, explicit selection, and confirmation.
+The loaded volume retains the measured gap between every adjacent source DICOM
+position. The cursor inspector shows the previous and next source gaps so an
+override does not hide the original spacing anomaly behind ITK's uniform grid.
 
 ## Tests
 

@@ -63,6 +63,9 @@ public:
     [[nodiscard]] const std::vector<DicomMetadataEntry>& dicomMetadata() const
         noexcept;
     void setDicomMetadata(std::vector<DicomMetadataEntry> metadata);
+    [[nodiscard]] const std::vector<double>& dicomSliceGapsMillimetres() const
+        noexcept;
+    void setDicomSliceGapsMillimetres(std::vector<double> gaps);
     [[nodiscard]] std::optional<VoxelSample> sampleNearestPhysical(
         const ImageGeometry::Vector& point) const;
     [[nodiscard]] std::optional<VoxelSample> sampleMeanPhysical(
@@ -85,6 +88,7 @@ private:
     ScalarRange scalarRange_{};
     std::vector<std::uint8_t> displayRgb_;
     std::vector<DicomMetadataEntry> dicomMetadata_;
+    std::vector<double> dicomSliceGapsMillimetres_;
 };
 
 } // namespace radmarky::core

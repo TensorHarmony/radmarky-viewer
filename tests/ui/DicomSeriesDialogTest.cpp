@@ -4,8 +4,10 @@
 #include <QClipboard>
 #include <QDialogButtonBox>
 #include <QGuiApplication>
+#include <QHeaderView>
 #include <QListWidget>
 #include <QPushButton>
+#include <QScrollBar>
 #include <QTableView>
 
 #include <filesystem>
@@ -93,7 +95,7 @@ int main(int argc, char* argv[])
 
     auto* const model = table->model();
     passed &= expectTrue(model->rowCount() == 3, "one row per candidate series");
-    passed &= expectTrue(model->columnCount() == 7, "series summary columns");
+    passed &= expectTrue(model->columnCount() == 8, "series summary columns");
     passed &= expectTrue(
         model->data(model->index(0, 1), Qt::DisplayRole).toString()
             == QStringLiteral("Chest thin"),
@@ -117,9 +119,27 @@ int main(int argc, char* argv[])
             == QStringLiteral("2.000 mm"),
         "slice spacing shown");
     passed &= expectTrue(
-        model->data(model->index(0, 6), Qt::DisplayRole).toString()
+        model->data(model->index(0, 7), Qt::DisplayRole).toString()
             == QStringLiteral("Consistent"),
         "consistency shown");
+    passed &= expectTrue(
+        model->headerData(6, Qt::Horizontal, Qt::DisplayRole).toString()
+                == QStringLiteral("Error code")
+            && model->data(model->index(0, 6), Qt::DisplayRole).toString()
+                == QStringLiteral("—")
+            && model->data(model->index(2, 6), Qt::DisplayRole).toString()
+                == QStringLiteral("DICOM_GEOMETRY_MISSING_SPATIAL_METADATA"),
+        "stable geometry error codes shown in their own column");
+    dialog.show();
+    application.processEvents();
+    passed &= expectTrue(
+        table->horizontalScrollMode() == QAbstractItemView::ScrollPerPixel
+            && table->horizontalScrollBar()->maximum() > 0
+            && table->horizontalHeader()->sectionResizeMode(3)
+                == QHeaderView::Interactive
+            && table->horizontalHeader()->sectionResizeMode(7)
+                == QHeaderView::Interactive,
+        "wide series table scrolls horizontally to hidden content");
     const auto fileNamesIndex = model->index(2, 3);
     passed &= expectTrue(
         model->data(fileNamesIndex, Qt::DisplayRole).toString()
@@ -198,7 +218,7 @@ int main(int argc, char* argv[])
         auto* const overrideModel = overrideTable->model();
         passed &= expectTrue(
             overrideModel->data(
-                overrideModel->index(0, 6), Qt::DisplayRole).toString()
+                overrideModel->index(0, 7), Qt::DisplayRole).toString()
                 == QStringLiteral(
                     "Warning: non-uniform spacing (override available)"),
             "spacing override warning shown");
@@ -241,7 +261,7 @@ int main(int argc, char* argv[])
         passed &= expectTrue(
             metadataOverrideModel
                     ->data(
-                        metadataOverrideModel->index(0, 6), Qt::DisplayRole)
+                        metadataOverrideModel->index(0, 7), Qt::DisplayRole)
                     .toString()
                 == QStringLiteral(
                     "Warning: declared spacing disagrees with slice positions "
@@ -268,6 +288,55 @@ int main(int argc, char* argv[])
                 && metadataOverrideDialog
                        .selectedSeriesRequiresSliceSpacingOverride(),
             "spacing metadata disagreement can be selected manually");
+    }
+
+    std::vector<radmarky::io::DicomFileRecord> missingSlices{
+        recordAt(40, "10.10.10", "Missing slice", 0.0),
+        recordAt(41, "10.10.10", "Missing slice", 1.0),
+        recordAt(42, "10.10.10", "Missing slice", 3.0),
+        recordAt(43, "10.10.10", "Missing slice", 4.0),
+    };
+    radmarky::ui::DicomSeriesDialog missingSlicesDialog(missingSlices);
+    auto* const missingSlicesTable = missingSlicesDialog.findChild<QTableView*>(
+        QStringLiteral("dicomSeriesTable"));
+    auto* const missingSlicesButtons =
+        missingSlicesDialog.findChild<QDialogButtonBox*>();
+    passed &= expectTrue(
+        missingSlicesTable != nullptr && missingSlicesButtons != nullptr,
+        "missing slice review controls exist");
+    if(missingSlicesTable != nullptr && missingSlicesButtons != nullptr)
+    {
+        auto* const missingSlicesModel = missingSlicesTable->model();
+        passed &= expectTrue(
+            missingSlicesModel
+                    ->data(missingSlicesModel->index(0, 6), Qt::DisplayRole)
+                    .toString()
+                    == QStringLiteral("DICOM_GEOMETRY_MISSING_SLICES")
+                && missingSlicesModel
+                       ->data(missingSlicesModel->index(0, 7), Qt::DisplayRole)
+                       .toString()
+                    == QStringLiteral(
+                        "Warning: one or more slices appear to be missing "
+                        "(override available)"),
+            "missing slice error code and override warning shown");
+        passed &= expectTrue(
+            missingSlicesModel
+                        ->data(
+                            missingSlicesModel->index(0, 0), Qt::CheckStateRole)
+                        .toInt()
+                    == Qt::Unchecked
+                && !missingSlicesButtons->button(QDialogButtonBox::Ok)
+                        ->isEnabled(),
+            "missing slice candidate opens review without default selection");
+        passed &= expectTrue(
+            missingSlicesModel->setData(
+                missingSlicesModel->index(0, 0),
+                Qt::Checked,
+                Qt::CheckStateRole)
+                && missingSlicesButtons->button(QDialogButtonBox::Ok)->isEnabled()
+                && missingSlicesDialog.selectedSeriesRequiresMissingSlicesOverride()
+                && missingSlicesDialog.selectedSeriesRequiresSliceSpacingOverride(),
+            "missing slice candidate can be selected for explicit override");
     }
 
     return passed ? 0 : 1;

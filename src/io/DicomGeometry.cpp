@@ -147,6 +147,39 @@ bool hasMissingSlicePattern(
 
 } // namespace
 
+std::string_view dicomGeometryIssueCode(
+    const DicomGeometryIssueKind kind) noexcept
+{
+    switch(kind)
+    {
+    case DicomGeometryIssueKind::MissingSpatialMetadata:
+        return "DICOM_GEOMETRY_MISSING_SPATIAL_METADATA";
+    case DicomGeometryIssueKind::InvalidOrientation:
+        return "DICOM_GEOMETRY_INVALID_ORIENTATION";
+    case DicomGeometryIssueKind::InconsistentOrientation:
+        return "DICOM_GEOMETRY_INCONSISTENT_ORIENTATION";
+    case DicomGeometryIssueKind::InconsistentDimensions:
+        return "DICOM_GEOMETRY_INCONSISTENT_DIMENSIONS";
+    case DicomGeometryIssueKind::InconsistentPixelSpacing:
+        return "DICOM_GEOMETRY_INCONSISTENT_PIXEL_SPACING";
+    case DicomGeometryIssueKind::InconsistentSpacingMetadata:
+        return "DICOM_GEOMETRY_INCONSISTENT_SPACING_METADATA";
+    case DicomGeometryIssueKind::SpacingMetadataMismatch:
+        return "DICOM_GEOMETRY_SPACING_METADATA_MISMATCH";
+    case DicomGeometryIssueKind::InconsistentFrameOfReference:
+        return "DICOM_GEOMETRY_INCONSISTENT_FRAME_OF_REFERENCE";
+    case DicomGeometryIssueKind::DuplicateSlice:
+        return "DICOM_GEOMETRY_DUPLICATE_SLICE";
+    case DicomGeometryIssueKind::MissingSlices:
+        return "DICOM_GEOMETRY_MISSING_SLICES";
+    case DicomGeometryIssueKind::NonUniformSpacing:
+        return "DICOM_GEOMETRY_NON_UNIFORM_SPACING";
+    case DicomGeometryIssueKind::InconsistentStackDirection:
+        return "DICOM_GEOMETRY_INCONSISTENT_STACK_DIRECTION";
+    }
+    return "DICOM_GEOMETRY_UNKNOWN";
+}
+
 DicomGeometryAnalysis analyzeDicomGeometry(
     const std::vector<DicomFileRecord>& records)
 {

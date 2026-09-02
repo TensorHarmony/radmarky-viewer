@@ -422,6 +422,55 @@ int main()
                 == radmarky::core::ImageGeometry::Dimensions{{4, 3, 12}},
             "explicit spacing override permits DICOM import");
 
+        auto missingSliceRecords = records;
+        radmarky::io::DicomFileRecord::PatientPosition positionStep{};
+        for(std::size_t axis = 0; axis < 3; ++axis)
+        {
+            positionStep[axis] =
+                (*missingSliceRecords[6].imagePositionPatient)[axis]
+                - (*missingSliceRecords[5].imagePositionPatient)[axis];
+        }
+        for(std::size_t index = 6; index < missingSliceRecords.size(); ++index)
+        {
+            for(std::size_t axis = 0; axis < 3; ++axis)
+            {
+                (*missingSliceRecords[index].imagePositionPatient)[axis] +=
+                    positionStep[axis];
+            }
+        }
+        const auto missingSliceGeometry =
+            radmarky::io::analyzeDicomGeometry(missingSliceRecords);
+        passed &= expectTrue(
+            missingSliceGeometry.canOverrideMissingSlices(),
+            "reader fixture has overridable missing slice gap");
+        passed &= expectThrows(
+            [&] { (void)radmarky::io::DicomReader::read(missingSliceRecords); },
+            "strict reader rejects missing slice gap");
+        const auto missingSliceOverrideVolume = radmarky::io::DicomReader::read(
+            missingSliceRecords,
+            {},
+            {},
+            nullptr,
+            radmarky::io::DicomReadGeometryPolicy::AllowSliceSpacingOverride);
+        passed &= expectTrue(
+            missingSliceOverrideVolume->geometry().dimensions()
+                == radmarky::core::ImageGeometry::Dimensions{{4, 3, 12}},
+            "explicit override permits DICOM import with a missing slice gap");
+        const auto& missingSliceGaps =
+            missingSliceOverrideVolume->dicomSliceGapsMillimetres();
+        passed &= expectTrue(
+            missingSliceGaps.size() == 11,
+            "source DICOM gaps retained after missing-slice override");
+        if(missingSliceGaps.size() == 11)
+        {
+            passed &= expectNear(
+                missingSliceGaps[4], 2.5, "gap before missing slice position");
+            passed &= expectNear(
+                missingSliceGaps[5], 5.0, "missing slice position gap");
+            passed &= expectNear(
+                missingSliceGaps[6], 2.5, "gap after missing slice position");
+        }
+
         auto spacingMetadataMismatchRecords = records;
         for(auto& record : spacingMetadataMismatchRecords)
         {
@@ -489,6 +538,16 @@ int main()
         passed &= expectNear(volume->geometry().spacing()[0], 0.7, "spacing x");
         passed &= expectNear(volume->geometry().spacing()[1], 0.8, "spacing y");
         passed &= expectNear(volume->geometry().spacing()[2], 2.5, "spacing z");
+        const auto& sourceSliceGaps = volume->dicomSliceGapsMillimetres();
+        passed &= expectTrue(
+            sourceSliceGaps.size() == 11, "source DICOM gap count");
+        if(sourceSliceGaps.size() == 11)
+        {
+            passed &= expectNear(
+                sourceSliceGaps.front(), 2.5, "first source DICOM gap");
+            passed &= expectNear(
+                sourceSliceGaps.back(), 2.5, "last source DICOM gap");
+        }
         passed &= expectNear(
             volume->geometry().direction()[0][2],
             gantryTiltX,
