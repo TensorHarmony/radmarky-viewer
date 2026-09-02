@@ -119,7 +119,8 @@ the active label. Missing files are reported rather than silently ignored.
   archives containing nested folders.
 - Detect and separate multiple DICOM series before import, including distinct
   acquisitions that share a Series Instance UID.
-- Review the detected series and select one consistent stack to load.
+- Review the detected series and select one consistent stack, or compatible
+  parts sharing one Series Instance UID, to load.
 - Validate slice position, orientation, dimensions, pixel spacing, frame of
   reference, duplicate instances, gaps, and stack uniformity before loading.
 - Preserve uniform gantry tilt rather than flattening the image geometry.

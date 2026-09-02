@@ -38,7 +38,7 @@ public:
     [[nodiscard]] bool selectedSeriesRequiresSpacingMetadataMismatchOverride() const;
 
 private:
-    [[nodiscard]] std::optional<std::size_t> selectedSeriesIndex() const;
+    [[nodiscard]] std::vector<std::size_t> selectedSeriesIndices() const;
     void updateSelectionState();
 
     const std::vector<io::DicomFileRecord>& files_;

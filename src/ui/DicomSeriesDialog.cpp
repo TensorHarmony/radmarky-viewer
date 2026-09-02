@@ -1,5 +1,7 @@
 #include "ui/DicomSeriesDialog.h"
 
+#include "io/DicomGeometry.h"
+
 #include <QAbstractTableModel>
 #include <QAbstractItemView>
 #include <QClipboard>
@@ -82,8 +84,13 @@ public:
         QObject* const parent)
         : QAbstractTableModel(parent)
         , analysis_(analysis)
-        , selectedSeries_(analysis_.proposedSeriesIndex)
+        , selectedSeries_(analysis_.series.size(), false)
     {
+        if(analysis_.proposedSeriesIndex
+           && *analysis_.proposedSeriesIndex < selectedSeries_.size())
+        {
+            selectedSeries_[*analysis_.proposedSeriesIndex] = true;
+        }
         fileNames_.reserve(analysis_.series.size());
         for(const auto& candidate : analysis_.series)
         {
@@ -122,9 +129,7 @@ public:
         const auto& candidate = analysis_.series[row];
         if(role == Qt::CheckStateRole && index.column() == 0)
         {
-            return selectedSeries_ && *selectedSeries_ == row
-                ? Qt::Checked
-                : Qt::Unchecked;
+            return selectedSeries_[row] ? Qt::Checked : Qt::Unchecked;
         }
         if(role == Qt::DisplayRole)
         {
@@ -265,34 +270,59 @@ public:
            || index.row() < 0
            || static_cast<std::size_t>(index.row()) >= analysis_.series.size()
            || !analysis_.series[static_cast<std::size_t>(index.row())].importable()
-           || value.toInt() != Qt::Checked)
+           || (value.toInt() != Qt::Checked && value.toInt() != Qt::Unchecked))
         {
             return false;
         }
-        const auto previous = selectedSeries_;
-        selectedSeries_ = static_cast<std::size_t>(index.row());
-        if(previous)
+
+        const auto row = static_cast<std::size_t>(index.row());
+        if(value.toInt() == Qt::Unchecked)
         {
+            if(!selectedSeries_[row])
+            {
+                return true;
+            }
+            selectedSeries_[row] = false;
             emit dataChanged(
-                this->index(static_cast<int>(*previous), 0),
-                this->index(static_cast<int>(*previous), 0),
+                this->index(index.row(), 0),
+                this->index(index.row(), 0),
                 {Qt::CheckStateRole});
+            return true;
         }
+
+        const auto& selectedUid = analysis_.series[row].seriesInstanceUid;
+        for(std::size_t candidate = 0; candidate < selectedSeries_.size(); ++candidate)
+        {
+            if(selectedSeries_[candidate]
+               && analysis_.series[candidate].seriesInstanceUid != selectedUid)
+            {
+                selectedSeries_[candidate] = false;
+            }
+        }
+        selectedSeries_[row] = true;
         emit dataChanged(
-            this->index(index.row(), 0),
-            this->index(index.row(), 0),
+            this->index(0, 0),
+            this->index(rowCount() - 1, 0),
             {Qt::CheckStateRole});
         return true;
     }
 
-    [[nodiscard]] std::optional<std::size_t> selectedSeriesIndex() const
+    [[nodiscard]] std::vector<std::size_t> selectedSeriesIndices() const
     {
-        return selectedSeries_;
+        std::vector<std::size_t> indices;
+        for(std::size_t index = 0; index < selectedSeries_.size(); ++index)
+        {
+            if(selectedSeries_[index])
+            {
+                indices.push_back(index);
+            }
+        }
+        return indices;
     }
 
 private:
     const io::DicomSeriesAnalysis& analysis_;
-    std::optional<std::size_t> selectedSeries_;
+    std::vector<bool> selectedSeries_;
     std::vector<QString> fileNames_;
 };
 
@@ -324,7 +354,8 @@ DicomSeriesDialog::DicomSeriesDialog(
     auto* const explanation = new QLabel(
         tr("The DICOM input has been separated into candidate image stacks. "
            "Review their resolution, measured slice spacing, and consistency, "
-           "then select one series to import. A series with only missing slices, "
+           "then select one series or multiple parts of the same series to import. "
+           "A selection with only missing slices, "
            "non-uniform slice spacing, or a disagreement between declared spacing "
            "and uniform slice positions can be imported with confirmation; other "
            "inconsistent rows cannot be imported."),
@@ -363,12 +394,10 @@ DicomSeriesDialog::DicomSeriesDialog(
     table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     table_->setAlternatingRowColors(false);
     connect(table_, &QTableView::clicked, this, [this](const QModelIndex& index) {
-        if(index.isValid())
+        if(index.isValid() && index.column() != 0)
         {
-            model_->setData(
-                model_->index(index.row(), 0),
-                Qt::Checked,
-                Qt::CheckStateRole);
+            const auto checkIndex = model_->index(index.row(), 0);
+            model_->setData(checkIndex, Qt::Checked, Qt::CheckStateRole);
         }
     });
     connect(
@@ -414,7 +443,27 @@ DicomSeriesDialog::DicomSeriesDialog(
     importButton_ = buttons->button(QDialogButtonBox::Ok);
     importButton_->setText(tr("Import"));
     connect(buttons, &QDialogButtonBox::accepted, this, [this] {
-        if(selectedSeriesRequiresMissingSlicesOverride())
+        if(selectedSeriesIndices().size() > 1
+           && selectedSeriesRequiresSliceSpacingOverride())
+        {
+            const auto answer = QMessageBox::warning(
+                this,
+                tr("Import Multiple DICOM Parts?"),
+                tr("The selected parts share one Series Instance UID, but together "
+                   "they do not form one uniformly spaced image stack. RadMarky will "
+                   "spatially order every selected file on a uniform 3-D grid so an "
+                   "annotation covering all selected slices can be loaded. Overlapping "
+                   "or irregular source positions cannot all be preserved exactly, so "
+                   "measurements and spatial alignment along the slice axis may be "
+                   "inaccurate.\n\nImport all selected parts anyway?"),
+                QMessageBox::Yes | QMessageBox::No,
+                QMessageBox::No);
+            if(answer != QMessageBox::Yes)
+            {
+                return;
+            }
+        }
+        else if(selectedSeriesRequiresMissingSlicesOverride())
         {
             const auto answer = QMessageBox::warning(
                 this,
@@ -482,87 +531,92 @@ DicomSeriesDialog::DicomSeriesDialog(
 std::vector<std::filesystem::path> DicomSeriesDialog::selectedFilePaths() const
 {
     std::vector<std::filesystem::path> paths;
-    const auto selected = selectedSeriesIndex();
-    if(!selected)
+    const auto selected = selectedSeriesIndices();
+    for(const auto seriesIndex : selected)
     {
-        return paths;
-    }
-    for(const auto index : analysis_.series[*selected].recordIndices)
-    {
-        paths.push_back(files_[index].filePath);
+        for(const auto recordIndex : analysis_.series[seriesIndex].recordIndices)
+        {
+            paths.push_back(files_[recordIndex].filePath);
+        }
     }
     return paths;
 }
 
 std::vector<io::DicomFileRecord> DicomSeriesDialog::selectedRecords() const
 {
-    const auto selected = selectedSeriesIndex();
+    const auto selected = selectedSeriesIndices();
     std::vector<io::DicomFileRecord> records;
-    if(!selected)
+    std::size_t recordCount = 0;
+    for(const auto seriesIndex : selected)
     {
-        return records;
+        recordCount += analysis_.series[seriesIndex].recordIndices.size();
     }
-    const auto& indices = analysis_.series[*selected].recordIndices;
-    records.reserve(indices.size());
-    for(const auto index : indices)
+    records.reserve(recordCount);
+    for(const auto seriesIndex : selected)
     {
-        records.push_back(files_[index]);
+        for(const auto recordIndex : analysis_.series[seriesIndex].recordIndices)
+        {
+            records.push_back(files_[recordIndex]);
+        }
     }
     return records;
 }
 
 bool DicomSeriesDialog::selectedSeriesRequiresNonUniformSpacingOverride() const
 {
-    const auto selected = selectedSeriesIndex();
-    return selected && *selected < analysis_.series.size()
-        && analysis_.series[*selected].nonUniformSpacingOverrideAllowed;
+    const auto records = selectedRecords();
+    return !records.empty()
+        && io::analyzeDicomGeometry(records).canOverrideNonUniformSpacing();
 }
 
 bool DicomSeriesDialog::selectedSeriesRequiresMissingSlicesOverride() const
 {
-    const auto selected = selectedSeriesIndex();
-    return selected && *selected < analysis_.series.size()
-        && analysis_.series[*selected].missingSlicesOverrideAllowed;
+    const auto records = selectedRecords();
+    return !records.empty()
+        && io::analyzeDicomGeometry(records).canOverrideMissingSlices();
 }
 
 bool DicomSeriesDialog::selectedSeriesRequiresSpacingMetadataMismatchOverride() const
 {
-    const auto selected = selectedSeriesIndex();
-    return selected && *selected < analysis_.series.size()
-        && analysis_.series[*selected].spacingMetadataMismatchOverrideAllowed;
+    const auto records = selectedRecords();
+    return !records.empty()
+        && io::analyzeDicomGeometry(records).canOverrideSpacingMetadataMismatch();
 }
 
 bool DicomSeriesDialog::selectedSeriesRequiresSliceSpacingOverride() const
 {
-    return selectedSeriesRequiresMissingSlicesOverride()
-        || selectedSeriesRequiresNonUniformSpacingOverride()
-        || selectedSeriesRequiresSpacingMetadataMismatchOverride();
+    const auto records = selectedRecords();
+    return !records.empty()
+        && io::analyzeDicomGeometry(records).canOverrideSliceSpacing();
 }
 
-std::optional<std::size_t> DicomSeriesDialog::selectedSeriesIndex() const
+std::vector<std::size_t> DicomSeriesDialog::selectedSeriesIndices() const
 {
-    return model_->selectedSeriesIndex();
+    return model_->selectedSeriesIndices();
 }
 
 void DicomSeriesDialog::updateSelectionState()
 {
-    const auto selected = selectedSeriesIndex();
-    const bool valid = selected
-        && *selected < analysis_.series.size()
-        && analysis_.series[*selected].importable();
+    const auto selected = selectedSeriesIndices();
+    const auto records = selectedRecords();
+    const auto geometry = records.empty()
+        ? io::DicomGeometryAnalysis{}
+        : io::analyzeDicomGeometry(records);
+    const bool valid = !selected.empty()
+        && (geometry.valid() || geometry.canOverrideSliceSpacing());
     importButton_->setEnabled(valid);
 
-    const std::size_t selectedFiles = valid
-        ? analysis_.series[*selected].recordIndices.size()
-        : 0;
+    const std::size_t selectedFiles = records.size();
     const std::size_t leftBehind = files_.size() - selectedFiles;
     summary_->setText(valid
-            ? tr("Detected series: %1  |  Selected files: %2  |  Left behind: %3")
+            ? tr("Detected stacks: %1  |  Selected stacks: %2  |  Selected files: %3  |  "
+                 "Left behind: %4")
                   .arg(static_cast<qulonglong>(analysis_.series.size()))
+                  .arg(static_cast<qulonglong>(selected.size()))
                   .arg(static_cast<qulonglong>(selectedFiles))
                   .arg(static_cast<qulonglong>(leftBehind))
-            : tr("Detected series: %1  |  Select one importable series to continue  |  "
-                 "Ignored or left behind: %2")
+            : tr("Detected stacks: %1  |  Select one series or compatible parts to "
+                 "continue  |  Ignored or left behind: %2")
                   .arg(static_cast<qulonglong>(analysis_.series.size()))
                   .arg(static_cast<qulonglong>(files_.size())));
 }

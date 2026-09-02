@@ -166,7 +166,7 @@ int main(int argc, char* argv[])
                 == Qt::Unchecked
             && model->data(model->index(1, 0), Qt::CheckStateRole).toInt()
                 == Qt::Checked,
-        "candidate selection is exclusive");
+        "different-series selection is exclusive");
     passed &= expectTrue(
         dialog.selectedRecords().size() == 1000,
         "selected candidate returns only its files");
@@ -177,6 +177,58 @@ int main(int argc, char* argv[])
     passed &= expectTrue(
         buttons->button(QDialogButtonBox::Ok)->isEnabled(),
         "valid selection remains importable");
+
+    std::vector<radmarky::io::DicomFileRecord> overlappingParts;
+    for(std::size_t index = 0; index < 4; ++index)
+    {
+        auto record = recordAt(index, "4.4.4", "Overlapping acquisition", index);
+        record.acquisitionNumber = 1;
+        overlappingParts.push_back(std::move(record));
+    }
+    for(std::size_t index = 0; index < 3; ++index)
+    {
+        auto record = recordAt(
+            4 + index, "4.4.4", "Overlapping acquisition", 1.01 + index);
+        record.acquisitionNumber = 2;
+        overlappingParts.push_back(std::move(record));
+    }
+    radmarky::ui::DicomSeriesDialog partsDialog(overlappingParts);
+    auto* const partsTable = partsDialog.findChild<QTableView*>(
+        QStringLiteral("dicomSeriesTable"));
+    auto* const partsButtons = partsDialog.findChild<QDialogButtonBox*>();
+    passed &= expectTrue(
+        partsTable != nullptr && partsButtons != nullptr,
+        "multi-part selection controls exist");
+    if(partsTable != nullptr && partsButtons != nullptr)
+    {
+        auto* const partsModel = partsTable->model();
+        passed &= expectTrue(partsModel->rowCount() == 2, "shared UID split into parts");
+        passed &= expectTrue(
+            partsModel->setData(
+                partsModel->index(1, 0), Qt::Checked, Qt::CheckStateRole)
+                && partsModel->data(
+                       partsModel->index(0, 0), Qt::CheckStateRole).toInt()
+                    == Qt::Checked
+                && partsModel->data(
+                       partsModel->index(1, 0), Qt::CheckStateRole).toInt()
+                    == Qt::Checked,
+            "parts of one Series Instance UID can be selected together");
+        passed &= expectTrue(
+            partsDialog.selectedRecords().size() == overlappingParts.size()
+                && partsDialog.selectedFilePaths().size() == overlappingParts.size(),
+            "multi-part selection returns every source file");
+        passed &= expectTrue(
+            partsDialog.selectedSeriesRequiresMissingSlicesOverride()
+                && partsDialog.selectedSeriesRequiresSliceSpacingOverride()
+                && partsButtons->button(QDialogButtonBox::Ok)->isEnabled(),
+            "combined parts use the explicit spacing override path");
+        passed &= expectTrue(
+            partsModel->setData(
+                partsModel->index(1, 0), Qt::Unchecked, Qt::CheckStateRole)
+                && partsDialog.selectedRecords().size() == 4
+                && !partsDialog.selectedSeriesRequiresSliceSpacingOverride(),
+            "an individual part can be deselected");
+    }
 
     auto thirdSlice = recordAt(0, "2.3.4", "Shuffled input", 2.0);
     auto firstSlice = recordAt(1, "2.3.4", "Shuffled input", 0.0);

@@ -140,7 +140,7 @@ input files or dropped folders
     -> scan every file by content for DICOM metadata
     -> group Series Instance UIDs and separate defensible fused stacks
     -> review candidate resolution, spacing, and consistency
-    -> select one consistent series
+    -> select one consistent series or compatible parts of one Series Instance UID
     -> decode pixels into a temporary Volume
     -> install the Volume in the viewer
 ```
@@ -175,6 +175,10 @@ drag order. Double-clicking the filenames cell copies the complete list to the
 clipboard; the Series Description and Series Instance UID cells can be copied
 the same way. Unreadable files and DICOM objects without a Series Instance UID
 are listed as ignored; candidates not chosen by the user are left behind.
+Multiple detected parts can be selected together only when they share one
+Series Instance UID. Their combined geometry is validated again and requires
+the same explicit spacing-override confirmation as any other non-uniform
+selection.
 Inconsistent candidates remain visible for diagnosis and cannot normally be
 selected. The table includes stable textual geometry error codes and scrolls
 horizontally to keep every diagnostic reachable. An explicit override is
