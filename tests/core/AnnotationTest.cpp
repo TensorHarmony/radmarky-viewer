@@ -1,4 +1,5 @@
 #include "core/Annotation.h"
+#include "core/OrthogonalSliceGeometry.h"
 
 #include <itkImage.h>
 
@@ -208,41 +209,75 @@ int main()
         AnnotationKind::LabelMap);
     passed &= expectThrows(
         [&] { flippedLabel.verifyGeometry(primary->geometry()); },
-        "label direction mismatch before conforming");
-    flippedLabel.conformGeometry(primary->geometry());
+        "label direction mismatch");
+    passed &= expectThrows(
+        [&] { flippedLabel.conformGeometry(primary->geometry()); },
+        "label direction mismatch is not silently conformed");
+    passed &= flippedLabel.volume().geometry().origin()[2]
+        == flippedOrigin[2];
+    passed &= flippedLabel.volume().geometry().direction()[2][2] == -1.0;
+    flippedLabel.assumePrimaryGeometry(primary->geometry());
     flippedLabel.verifyGeometry(primary->geometry());
     passed &= flippedLabel.volume().image().GetPixel(retainedIndex) == 9.0F;
+    passed &= flippedLabel.isModified();
 
     auto obliquePrimary = std::make_shared<Volume>(makeObliqueImage());
     const auto obliqueBlank =
         Annotation::createBlankLabelMap("oblique-blank", *obliquePrimary);
     obliqueBlank->verifyGeometry(obliquePrimary->geometry());
     passed &= obliqueBlank->volume().geometry().dimensions()
-        != obliquePrimary->geometry().dimensions();
-    passed &= std::abs(
-                  obliqueBlank->volume().geometry().direction()[2][2] + 1.0)
-        < 1.0e-12;
+        == obliquePrimary->geometry().dimensions();
+    passed &= obliqueBlank->volume().geometry().spacing()
+        == obliquePrimary->geometry().spacing();
+    passed &= obliqueBlank->volume().geometry().origin()
+        == obliquePrimary->geometry().origin();
+    passed &= obliqueBlank->volume().geometry().direction()
+        == obliquePrimary->geometry().direction();
 
+    auto importedImage = makeObliqueImage();
+    const Image::IndexType sparseMarker{{7, 5, 4}};
+    importedImage->SetPixel(sparseMarker, 3.0F);
     Annotation importedOblique(
         "oblique-labels.nii.gz",
         {},
-        std::make_shared<Volume>(makeObliqueImage(3.0F)),
+        std::make_shared<Volume>(importedImage),
         AnnotationKind::LabelMap);
-    passed &= expectThrows(
-        [&] { importedOblique.verifyGeometry(obliquePrimary->geometry()); },
-        "native oblique label grid before conforming");
-    importedOblique.conformGeometry(obliquePrimary->geometry());
-    importedOblique.verifyGeometry(obliquePrimary->geometry());
-    const auto conformedDimensions =
+    const auto* const importedBuffer =
+        importedOblique.volume().image().GetBufferPointer();
+    const auto importedDimensions =
         importedOblique.volume().geometry().dimensions();
     importedOblique.conformGeometry(obliquePrimary->geometry());
+    importedOblique.verifyGeometry(obliquePrimary->geometry());
     passed &= importedOblique.volume().geometry().dimensions()
-        == conformedDimensions;
-    const auto obliqueCenter =
-        obliquePrimary->geometry().indexToPhysical({{4.0, 3.0, 2.0}});
-    const auto conformedSample =
-        importedOblique.volume().sampleNearestPhysical(obliqueCenter);
-    passed &= conformedSample && conformedSample->value == 3.0F;
+        == importedDimensions;
+    passed &= importedOblique.volume().image().GetBufferPointer()
+        == importedBuffer;
+    passed &= importedOblique.volume().image().GetPixel(sparseMarker) == 3.0F;
+    importedOblique.conformGeometry(obliquePrimary->geometry());
+    passed &= importedOblique.volume().image().GetBufferPointer()
+        == importedBuffer;
+    const auto markerPhysical = obliquePrimary->geometry().indexToPhysical(
+        {{7.0, 5.0, 4.0}});
+    const auto nearestMarkerSlice =
+        importedOblique.nearestAxialSlicePointContainingLabel(
+            3, obliquePrimary->geometry().indexToPhysical({{4.0, 3.0, 0.0}}));
+    passed &= nearestMarkerSlice.has_value();
+    if(nearestMarkerSlice)
+    {
+        const auto axial =
+            radmarky::core::OrthogonalSliceGeometry::fromImageGeometry(
+                obliquePrimary->geometry(),
+                radmarky::core::SliceOrientation::Axial);
+        passed &= std::abs(
+                      axial.normalCoordinate(*nearestMarkerSlice)
+                      - axial.normalMinimum()
+                      - std::round(
+                            (axial.normalCoordinate(markerPhysical)
+                             - axial.normalMinimum())
+                            / axial.sliceStep())
+                            * axial.sliceStep())
+            < 1.0e-8;
+    }
 
     passed &= expectThrows(
         [] {

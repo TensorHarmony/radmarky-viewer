@@ -366,6 +366,7 @@ struct AnnotationPipeline
     vtkSmartPointer<vtkImageSliceMapper> mapper;
     vtkSmartPointer<vtkImageSlice> imageSlice;
     vtkSmartPointer<vtkLookupTable> lookupTable;
+    bool labelMap = false;
     bool visible = true;
 };
 
@@ -390,6 +391,7 @@ AnnotationPipeline makeAnnotationPipeline(
     pipeline.lookupTable = labelMap
         ? makeLabelLookupTable(scalarMaximum)
         : makeScalarLookupTable(scalarMinimum, scalarMaximum);
+    pipeline.labelMap = labelMap;
 
     configureOrthogonalReslice(
         *pipeline.reslice,
@@ -436,6 +438,7 @@ struct VtkViewport::Impl
     }
 
     core::SliceOrientation orientation;
+    core::SliceAlignment alignment = core::SliceAlignment::Patient;
     QVTKOpenGLNativeWidget* widget = nullptr;
     vtkSmartPointer<vtkGenericOpenGLRenderWindow> renderWindow;
     vtkSmartPointer<vtkRenderer> renderer;
@@ -722,20 +725,22 @@ VtkViewport::~VtkViewport()
 void VtkViewport::setInput(
     vtkImageData* const imageData,
     const core::ImageGeometry& geometry,
-    const core::ImageGeometry::Vector& cursorPhysical)
+    const core::ImageGeometry::Vector& cursorPhysical,
+    const core::SliceAlignment alignment)
 {
     if(imageData == nullptr)
     {
         throw std::invalid_argument("VTK slice input cannot be null");
     }
 
-    auto sliceGeometry =
-        core::OrthogonalSliceGeometry::fromImageGeometry(geometry, impl_->orientation);
+    auto sliceGeometry = core::OrthogonalSliceGeometry::fromImageGeometry(
+        geometry, impl_->orientation, alignment);
     impl_->imageData = imageData;
     impl_->colorInput = imageData->GetNumberOfScalarComponents() == 3
         && imageData->GetScalarType() == VTK_UNSIGNED_CHAR;
     impl_->imageGeometry = geometry;
     impl_->sliceGeometry = sliceGeometry;
+    impl_->alignment = alignment;
     impl_->cursorPhysical = cursorPhysical;
     impl_->measurementStartPhysical.reset();
     impl_->measurementEndPhysical.reset();
@@ -775,6 +780,60 @@ void VtkViewport::setInput(
     impl_->imageSlice->SetVisibility(true);
     impl_->horizontalCrosshairActor->SetVisibility(true);
     impl_->verticalCrosshairActor->SetVisibility(true);
+    updateCrosshair();
+    resetView();
+}
+
+void VtkViewport::setSliceAlignment(const core::SliceAlignment alignment)
+{
+    if(!impl_->imageGeometry || !impl_->imageData
+       || impl_->alignment == alignment)
+    {
+        return;
+    }
+
+    auto slice = core::OrthogonalSliceGeometry::fromImageGeometry(
+        *impl_->imageGeometry, impl_->orientation, alignment);
+    configureOrthogonalReslice(
+        *impl_->reslice,
+        impl_->imageData,
+        slice,
+        impl_->cursorPhysical,
+        impl_->colorInput
+            ? 0.0
+            : std::numeric_limits<double>::quiet_NaN());
+    for(auto& annotation : impl_->annotations)
+    {
+        configureOrthogonalReslice(
+            *annotation.reslice,
+            annotation.imageData,
+            slice,
+            impl_->cursorPhysical,
+            annotation.labelMap
+                ? 0.0
+                : std::numeric_limits<double>::quiet_NaN());
+        if(annotation.labelMap)
+        {
+            annotation.reslice->SetInterpolationModeToNearestNeighbor();
+        }
+    }
+    if(impl_->annotationComparison)
+    {
+        configureOrthogonalReslice(
+            *impl_->annotationComparison->reslice,
+            impl_->annotationComparison->imageData,
+            slice,
+            impl_->cursorPhysical,
+            0.0);
+        impl_->annotationComparison->reslice->SetInterpolationModeToNearestNeighbor();
+    }
+
+    impl_->sliceGeometry = std::move(slice);
+    impl_->alignment = alignment;
+    impl_->measurementStartPhysical.reset();
+    impl_->measurementEndPhysical.reset();
+    impl_->measurementRulerActor->SetVisibility(false);
+    impl_->measurementLabelActor->SetVisibility(false);
     updateCrosshair();
     resetView();
 }

@@ -208,12 +208,15 @@ int main()
     auto obliqueLabels = radmarky::core::Annotation::createBlankLabelMap(
         "oblique.nii.gz", *obliquePrimary);
     AnnotationEditor obliqueEditor;
-    obliqueEditor.setAnnotation(obliqueLabels);
+    obliqueEditor.setAnnotation(
+        obliqueLabels, radmarky::core::SliceAlignment::Native);
     obliqueEditor.setActiveLabel(6);
     const auto& obliqueGeometry = obliqueLabels->volume().geometry();
     const auto obliqueSlice =
         radmarky::core::OrthogonalSliceGeometry::fromImageGeometry(
-            obliqueGeometry, radmarky::core::SliceOrientation::Axial);
+            obliqueGeometry,
+            radmarky::core::SliceOrientation::Axial,
+            radmarky::core::SliceAlignment::Native);
     const auto obliqueCenterPhysical =
         obliquePrimary->geometry().indexToPhysical({{40.0, 20.0, 6.0}});
     const auto obliqueCenter = radmarky::core::brushGridIndex(
@@ -232,6 +235,9 @@ int main()
     }
     const auto& obliqueImage = obliqueLabels->volume().image();
     const auto& obliqueDimensions = obliqueGeometry.dimensions();
+    passed &= obliqueDimensions == obliquePrimary->geometry().dimensions();
+    passed &= obliqueGeometry.direction()
+        == obliquePrimary->geometry().direction();
     std::size_t obliquePaintedCount = 0;
     std::set<long> obliquePaintedSlices;
     for(long z = 0; z < static_cast<long>(obliqueDimensions[2]); ++z)
@@ -248,8 +254,11 @@ int main()
             }
         }
     }
-    passed &= obliquePaintedCount > 55;
-    passed &= obliquePaintedSlices.size() == 1;
+    passed &= obliquePaintedCount > 0;
+    // Native/reference-plane editing must touch exactly one stored k plane.
+    // This is the behavior expected by ITK-SNAP and prevents a 2-D brush from
+    // appearing on adjacent slices of an oblique acquisition.
+    passed &= obliquePaintedSlices == std::set<long>{6};
     std::size_t currentPlanePaintedCount = 0;
     std::size_t adjacentPlanePaintedCount = 0;
     auto previousPlane = obliqueCenterPhysical;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/OrthogonalSliceGeometry.h"
 #include "core/Volume.h"
 
 #include <cstddef>
@@ -46,17 +47,19 @@ public:
     [[nodiscard]] std::optional<ImageGeometry::Vector>
     nearestAxialSlicePointContainingLabel(
         std::uint16_t label,
-        const ImageGeometry::Vector& currentPhysical) const;
+        const ImageGeometry::Vector& currentPhysical,
+        SliceAlignment alignment = SliceAlignment::Patient) const;
     [[nodiscard]] double opacity() const noexcept;
     void setOpacity(double opacity);
     [[nodiscard]] bool isVisible() const noexcept;
     void setVisible(bool visible) noexcept;
 
-    // Label maps are voxel-indexed annotations. Apply the anatomical header and,
-    // for oblique 3-D acquisitions, resample once to the patient-axial editing
-    // grid so each stored voxel belongs to one displayed axial slice. Scalar
-    // maps retain their physical header and must match the anatomical image.
-    void conformGeometry(const ImageGeometry& primaryGeometry);
+    // Annotation storage remains in the source image grid. Patient-coordinate
+    // display and editing must not resample or rewrite the stored label map.
+    void conformGeometry(const ImageGeometry& primaryGeometry) const;
+    // Explicit recovery for a voxel-indexed mask whose physical header is known
+    // to be absent or incorrect. Dimensions must already match the primary.
+    void assumePrimaryGeometry(const ImageGeometry& primaryGeometry);
     void verifyGeometry(const ImageGeometry& primaryGeometry) const;
 
 private:

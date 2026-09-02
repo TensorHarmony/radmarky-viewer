@@ -331,6 +331,7 @@ struct OrthogonalViewer::Impl
     vtkSmartPointer<vtkImageData> annotationComparison;
     std::optional<std::array<std::size_t, 2>> comparisonIndices;
     std::optional<core::ViewerState> state;
+    core::SliceAlignment sliceAlignment = core::SliceAlignment::Patient;
     std::optional<core::WindowLevel> windowLevelDragOrigin;
     std::optional<double> labelOpacityDragOrigin;
     VtkViewport::InteractionMode interactionMode =
@@ -728,6 +729,7 @@ void OrthogonalViewer::clearVolume()
     impl_->state.reset();
     impl_->imageData = nullptr;
     impl_->volume.reset();
+    impl_->sliceAlignment = core::SliceAlignment::Patient;
     impl_->annotations.clear();
     impl_->selectedAnnotationIndices.clear();
     impl_->annotationEditor.clearAnnotation();
@@ -761,9 +763,17 @@ void OrthogonalViewer::addAnnotation(
             "Annotation overlays require an anatomical image");
     }
     annotation->verifyGeometry(impl_->volume->geometry());
+    const bool labelMap = annotation->kind() == core::AnnotationKind::LabelMap;
+    const auto previousAlignment = impl_->sliceAlignment;
+    if(labelMap)
+    {
+        // A label map is defined on discrete reference-image planes. Display
+        // and edit those planes directly, as ITK-SNAP does, so an oblique
+        // patient reformat cannot mix neighboring slices into a false gap.
+        applySliceAlignment(core::SliceAlignment::Native);
+    }
     auto imageData = ItkVtkImageBridge::shareWithVtk(annotation->volume());
     const auto range = annotation->volume().scalarRange();
-    const bool labelMap = annotation->kind() == core::AnnotationKind::LabelMap;
     std::size_t addedPanelCount = 0;
     try
     {
@@ -787,6 +797,7 @@ void OrthogonalViewer::addAnnotation(
             impl_->panels[panel].viewport->removeAnnotation(
                 impl_->annotations.size());
         }
+        applySliceAlignment(previousAlignment);
         throw;
     }
     impl_->annotations.push_back({annotation, std::move(imageData)});
@@ -814,6 +825,14 @@ void OrthogonalViewer::removeAnnotation(const std::size_t index)
     restoreCrosshairInspection();
     impl_->annotationEditor.clearAnnotation();
     impl_->editableAnnotationIndex.reset();
+    const bool hasLabelMap = std::ranges::any_of(
+        impl_->annotations, [](const Impl::AnnotationData& item) {
+            return item.annotation->kind() == core::AnnotationKind::LabelMap;
+        });
+    if(!hasLabelMap)
+    {
+        applySliceAlignment(core::SliceAlignment::Patient);
+    }
     publishAnnotationEditingState();
 }
 
@@ -935,7 +954,8 @@ void OrthogonalViewer::setAnnotationSelection(
         {
             impl_->editableAnnotationIndex = selectedIndices[0];
             impl_->annotationEditor.setAnnotation(
-                impl_->annotations[selectedIndices[0]].annotation);
+                impl_->annotations[selectedIndices[0]].annotation,
+                impl_->sliceAlignment);
         }
         restoreCrosshairInspection();
         publishAnnotationLabels();
@@ -1436,7 +1456,8 @@ void OrthogonalViewer::goToNearestAxialSliceContainingLabel(const int label)
     }
     const auto target = annotation->nearestAxialSlicePointContainingLabel(
         static_cast<std::uint16_t>(label),
-        impl_->state->cursorPhysical());
+        impl_->state->cursorPhysical(),
+        impl_->sliceAlignment);
     if(!target)
     {
         return;
@@ -1798,20 +1819,22 @@ void OrthogonalViewer::setVolume(
     state.setIntensityRange(range.minimum, range.maximum);
     const auto cursor = state.cursorPhysical();
     const auto windowLevel = state.windowLevel();
+    constexpr auto alignment = core::SliceAlignment::Patient;
     std::array<core::OrthogonalSliceGeometry, 3> geometries{
         core::OrthogonalSliceGeometry::fromImageGeometry(
-            volume->geometry(), core::SliceOrientation::Axial),
+            volume->geometry(), core::SliceOrientation::Axial, alignment),
         core::OrthogonalSliceGeometry::fromImageGeometry(
-            volume->geometry(), core::SliceOrientation::Sagittal),
+            volume->geometry(), core::SliceOrientation::Sagittal, alignment),
         core::OrthogonalSliceGeometry::fromImageGeometry(
-            volume->geometry(), core::SliceOrientation::Coronal),
+            volume->geometry(), core::SliceOrientation::Coronal, alignment),
     };
 
     for(auto& panel : impl_->panels)
     {
         panel.viewport->setWindowLevel(windowLevel.window(), windowLevel.level());
         panel.viewport->setInverted(state.inverted());
-        panel.viewport->setInput(imageData, volume->geometry(), cursor);
+        panel.viewport->setInput(
+            imageData, volume->geometry(), cursor, alignment);
         panel.expandButton->setEnabled(true);
         panel.centerButton->setEnabled(true);
         panel.screenshotButton->setEnabled(true);
@@ -1820,6 +1843,7 @@ void OrthogonalViewer::setVolume(
     impl_->imageData = imageData;
     impl_->volume = volume;
     impl_->state = state;
+    impl_->sliceAlignment = alignment;
     impl_->windowLevelDragOrigin.reset();
     for(std::size_t index = 0; index < impl_->panels.size(); ++index)
     {
@@ -1846,6 +1870,39 @@ void OrthogonalViewer::setVolume(
                .arg(windowLevel.intensityMinimum())
                .arg(windowLevel.intensityMaximum());
     publishWindowLevel();
+}
+
+void OrthogonalViewer::applySliceAlignment(
+    const core::SliceAlignment alignment)
+{
+    if(!impl_->volume || !impl_->state || impl_->sliceAlignment == alignment)
+    {
+        return;
+    }
+
+    const auto& geometry = impl_->volume->geometry();
+    for(auto& panel : impl_->panels)
+    {
+        auto slice = core::OrthogonalSliceGeometry::fromImageGeometry(
+            geometry, panel.orientation, alignment);
+        panel.viewport->setSliceAlignment(alignment);
+        panel.geometry = std::move(slice);
+
+        const double intervals = std::round(
+            (panel.geometry->normalMaximum()
+             - panel.geometry->normalMinimum())
+            / panel.geometry->sliceStep());
+        const int maximum = static_cast<int>(std::clamp(
+            intervals,
+            1.0,
+            static_cast<double>(std::numeric_limits<int>::max())));
+        const QSignalBlocker blocker(panel.sliceScrollBar);
+        panel.sliceScrollBar->setRange(0, maximum);
+        panel.sliceScrollBar->setSingleStep(1);
+        panel.sliceScrollBar->setPageStep(10);
+    }
+    impl_->sliceAlignment = alignment;
+    publishCursor();
 }
 
 void OrthogonalViewer::selectPhysicalPoint(

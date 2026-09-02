@@ -83,10 +83,12 @@ int main()
         image->SetOrigin(origin);
         Image::DirectionType direction;
         direction.SetIdentity();
-        direction[0][0] = 0.0;
-        direction[0][1] = -1.0;
-        direction[1][0] = 1.0;
-        direction[1][1] = 0.0;
+        constexpr double sine = 0.17364817766693;
+        constexpr double cosine = 0.98480775301221;
+        direction[1][1] = cosine;
+        direction[1][2] = -sine;
+        direction[2][1] = sine;
+        direction[2][2] = cosine;
         image->SetDirection(direction);
         image->Allocate();
         image->FillBuffer(0.0F);

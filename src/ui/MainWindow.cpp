@@ -620,7 +620,7 @@ MainWindow::MainWindow(QWidget* parent)
     recentImages_->header()->setSectionResizeMode(1, QHeaderView::Stretch);
     recentImages_->header()->setSectionResizeMode(2, QHeaderView::Fixed);
     recentImages_->setColumnWidth(0, 480);
-    recentImages_->setColumnWidth(2, 76);
+    recentImages_->setColumnWidth(2, 100);
     emptyLayout->addWidget(recentTitle);
     emptyLayout->addWidget(recentHint);
     emptyLayout->addWidget(recentImages_, 1);
@@ -2337,7 +2337,43 @@ void MainWindow::loadAnnotations(const QStringList& fileNames)
                 path,
                 std::move(volume),
                 kind);
-            annotation->conformGeometry(primaryVolume_->geometry());
+            try
+            {
+                annotation->conformGeometry(primaryVolume_->geometry());
+            }
+            catch(const std::invalid_argument&)
+            {
+                const bool canAssumePrimaryGeometry =
+                    kind == core::AnnotationKind::LabelMap
+                    && annotation->volume().geometry().dimensions()
+                        == primaryVolume_->geometry().dimensions();
+                if(!canAssumePrimaryGeometry)
+                {
+                    throw;
+                }
+
+                const auto choice = QMessageBox::warning(
+                    this,
+                    tr("Annotation Header Mismatch"),
+                    tr("The annotation has the same voxel dimensions as the "
+                       "anatomical image, but its spacing, origin, or orientation "
+                       "is different. RadMarky will not replace the annotation "
+                       "header automatically.\n\n"
+                       "Choose Yes only if this is a voxel-for-voxel mask whose "
+                       "header is missing or known to be incorrect. RadMarky will "
+                       "then apply the anatomical image geometry without resampling "
+                       "the label data."),
+                    QMessageBox::Yes | QMessageBox::Cancel,
+                    QMessageBox::Cancel);
+                if(choice != QMessageBox::Yes)
+                {
+                    finishImportProgress();
+                    statusBar()->showMessage(
+                        tr("Annotation import cancelled"), 5000);
+                    return;
+                }
+                annotation->assumePrimaryGeometry(primaryVolume_->geometry());
+            }
             pending.push_back(std::move(annotation));
         }
 
@@ -3222,13 +3258,13 @@ void MainWindow::refreshRecentImages()
 
         auto* const folderCell = new QWidget(recentImages_);
         auto* const folderLayout = new QHBoxLayout(folderCell);
-        folderLayout->setContentsMargins(0, 0, 0, 0);
+        folderLayout->setContentsMargins(0, 0, 8, 0);
         folderLayout->setAlignment(Qt::AlignCenter);
         auto* const showInFolder = new QToolButton(folderCell);
         showInFolder->setObjectName(QStringLiteral("recentImageFolderButton"));
         showInFolder->setIcon(svgIcon(QStringLiteral(":/icons/open.svg")));
-        showInFolder->setIconSize(QSize(16, 16));
-        showInFolder->setFixedSize(QSize(28, 28));
+        showInFolder->setIconSize(QSize(20, 20));
+        showInFolder->setFixedSize(QSize(36, 36));
         showInFolder->setToolTip(tr("Show in folder"));
         showInFolder->setAccessibleName(tr("Show %1 in folder").arg(recent.name));
         const QString filePath = recent.sourceFiles.front();
@@ -3240,8 +3276,8 @@ void MainWindow::refreshRecentImages()
         auto* const removeRecent = new QToolButton(folderCell);
         removeRecent->setObjectName(QStringLiteral("removeRecentImageButton"));
         removeRecent->setIcon(svgIcon(QStringLiteral(":/icons/close.svg")));
-        removeRecent->setIconSize(QSize(14, 14));
-        removeRecent->setFixedSize(QSize(28, 28));
+        removeRecent->setIconSize(QSize(18, 18));
+        removeRecent->setFixedSize(QSize(36, 36));
         removeRecent->setToolTip(tr("Remove from recent images"));
         removeRecent->setAccessibleName(
             tr("Remove %1 from recent images").arg(recent.name));

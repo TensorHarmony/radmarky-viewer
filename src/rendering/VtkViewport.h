@@ -44,7 +44,9 @@ public:
     void setInput(
         vtkImageData* imageData,
         const core::ImageGeometry& geometry,
-        const core::ImageGeometry::Vector& cursorPhysical);
+        const core::ImageGeometry::Vector& cursorPhysical,
+        core::SliceAlignment alignment = core::SliceAlignment::Patient);
+    void setSliceAlignment(core::SliceAlignment alignment);
     void addAnnotation(
         vtkImageData* imageData,
         bool labelMap,

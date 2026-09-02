@@ -14,6 +14,15 @@ enum class SliceOrientation
     Coronal,
 };
 
+// Patient alignment produces the fixed RPS/AIR/RIP reformats used for general
+// review. Native alignment keeps each view on voxel planes from the reference
+// image, which is required for exact label-map review and editing.
+enum class SliceAlignment
+{
+    Patient,
+    Native,
+};
+
 class OrthogonalSliceGeometry
 {
 public:
@@ -21,7 +30,8 @@ public:
 
     [[nodiscard]] static OrthogonalSliceGeometry fromImageGeometry(
         const ImageGeometry& geometry,
-        SliceOrientation orientation);
+        SliceOrientation orientation,
+        SliceAlignment alignment = SliceAlignment::Patient);
 
     [[nodiscard]] SliceOrientation orientation() const noexcept;
     [[nodiscard]] const Vector& referenceLps() const noexcept;

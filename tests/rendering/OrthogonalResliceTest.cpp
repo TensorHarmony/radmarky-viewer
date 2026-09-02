@@ -294,6 +294,118 @@ int main()
             "moved cursor reslice voxel");
     }
 
+    // Reproduce the runoff case: a 3-D acquisition whose native axial planes
+    // are oblique to patient Z. Native/reference alignment must display one
+    // stored k plane, without cutting across neighboring label slices.
+    auto obliqueLabels = Image::New();
+    Image::RegionType obliqueRegion;
+    obliqueRegion.SetSize({{40, 30, 9}});
+    obliqueLabels->SetRegions(obliqueRegion);
+    Image::SpacingType obliqueSpacing;
+    obliqueSpacing[0] = 0.750371471;
+    obliqueSpacing[1] = 0.75;
+    obliqueSpacing[2] = 3.00021;
+    obliqueLabels->SetSpacing(obliqueSpacing);
+    Image::DirectionType obliqueDirection;
+    obliqueDirection[0][0] = 0.988373119;
+    obliqueDirection[1][0] = -0.138037540;
+    obliqueDirection[2][0] = 0.063993894;
+    obliqueDirection[0][1] = 0.137925197;
+    obliqueDirection[1][1] = 0.990423361;
+    obliqueDirection[2][1] = 0.006181;
+    obliqueDirection[0][2] = -0.063993894;
+    obliqueDirection[1][2] = 0.002683743;
+    obliqueDirection[2][2] = 0.997946;
+    obliqueLabels->SetDirection(obliqueDirection);
+    obliqueLabels->Allocate();
+    obliqueLabels->FillBuffer(0.0F);
+    constexpr long ringSlice = 5;
+    for(long y = 8; y <= 18; ++y)
+    {
+        for(long x = 12; x <= 24; ++x)
+        {
+            if(x == 12 || x == 24 || y == 8 || y == 18)
+            {
+                obliqueLabels->SetPixel({{x, y, ringSlice}}, 1.0F);
+            }
+        }
+    }
+    const radmarky::core::Volume obliqueLabelVolume(obliqueLabels);
+    const auto& obliqueGeometry = obliqueLabelVolume.geometry();
+    const auto obliqueVtk =
+        radmarky::rendering::ItkVtkImageBridge::shareWithVtk(obliqueLabelVolume);
+    const auto nativeAxial =
+        radmarky::core::OrthogonalSliceGeometry::fromImageGeometry(
+            obliqueGeometry,
+            radmarky::core::SliceOrientation::Axial,
+            radmarky::core::SliceAlignment::Native);
+    const auto ringCursor = obliqueGeometry.indexToPhysical(
+        {{20.0, 15.0, static_cast<double>(ringSlice)}});
+    vtkNew<vtkImageReslice> nativeLabelReslice;
+    radmarky::rendering::configureOrthogonalReslice(
+        *nativeLabelReslice,
+        obliqueVtk,
+        nativeAxial,
+        ringCursor,
+        0.0);
+    nativeLabelReslice->SetInterpolationModeToNearestNeighbor();
+    nativeLabelReslice->Update();
+
+    auto* const nativeOutput = nativeLabelReslice->GetOutput();
+    const int nativeWidth = nativeOutput->GetDimensions()[0];
+    const int nativeHeight = nativeOutput->GetDimensions()[1];
+    std::size_t nativeLabelCount = 0;
+    std::size_t nativeEndpoints = 0;
+    for(int y = 0; y < nativeHeight; ++y)
+    {
+        for(int x = 0; x < nativeWidth; ++x)
+        {
+            if(nativeOutput->GetScalarComponentAsDouble(x, y, 0, 0) != 1.0)
+            {
+                continue;
+            }
+            ++nativeLabelCount;
+            int neighbors = 0;
+            for(int dy = -1; dy <= 1; ++dy)
+            {
+                for(int dx = -1; dx <= 1; ++dx)
+                {
+                    if((dx == 0 && dy == 0) || x + dx < 0 || y + dy < 0
+                       || x + dx >= nativeWidth || y + dy >= nativeHeight)
+                    {
+                        continue;
+                    }
+                    neighbors += nativeOutput->GetScalarComponentAsDouble(
+                        x + dx, y + dy, 0, 0) == 1.0;
+                }
+            }
+            nativeEndpoints += neighbors < 2 ? 1U : 0U;
+        }
+    }
+    passed &= expectTrue(
+        nativeLabelCount > 0, "native oblique label plane contains contour");
+    passed &= expectTrue(
+        nativeEndpoints == 0, "native oblique contour remains closed");
+    passed &= expectNear(
+        (nativeAxial.normalMaximum() - nativeAxial.normalMinimum())
+            / nativeAxial.sliceStep(),
+        8.0,
+        "native oblique slice count");
+
+    for(const std::array<double, 2> sample : {
+            std::array<double, 2>{{0.0, 0.0}},
+            std::array<double, 2>{{12.0, 7.0}},
+            std::array<double, 2>{{-11.0, -6.0}}})
+    {
+        const auto point = nativeAxial.pointOnCursorPlane(
+            sample[0], sample[1], ringCursor);
+        passed &= expectNear(
+            obliqueGeometry.physicalToContinuousIndex(point)[2],
+            static_cast<double>(ringSlice),
+            "native oblique plane stays on one stored slice",
+            2.0e-5);
+    }
+
     const auto axialSlice =
         radmarky::core::OrthogonalSliceGeometry::fromImageGeometry(
             geometry, radmarky::core::SliceOrientation::Axial);

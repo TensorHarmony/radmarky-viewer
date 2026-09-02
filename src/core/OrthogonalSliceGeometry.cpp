@@ -35,6 +35,36 @@ ImageGeometry::Vector addScaled(
     return result;
 }
 
+ImageGeometry::Vector cross(
+    const ImageGeometry::Vector& left,
+    const ImageGeometry::Vector& right)
+{
+    return {{
+        left[1] * right[2] - left[2] * right[1],
+        left[2] * right[0] - left[0] * right[2],
+        left[0] * right[1] - left[1] * right[0],
+    }};
+}
+
+double length(const ImageGeometry::Vector& vector)
+{
+    return std::sqrt(dot(vector, vector));
+}
+
+ImageGeometry::Vector normalized(ImageGeometry::Vector vector)
+{
+    const double vectorLength = length(vector);
+    if(!std::isfinite(vectorLength) || vectorLength <= 1.0e-12)
+    {
+        throw std::invalid_argument("Image direction cannot define native slices");
+    }
+    for(auto& value : vector)
+    {
+        value /= vectorLength;
+    }
+    return vector;
+}
+
 std::array<std::size_t, 3> closestImageAxesByLpsAxis(
     const ImageGeometry& geometry)
 {
@@ -131,7 +161,8 @@ std::size_t sampleCountForExtent(const double extent, const double spacing)
 
 OrthogonalSliceGeometry OrthogonalSliceGeometry::fromImageGeometry(
     const ImageGeometry& geometry,
-    const SliceOrientation orientation)
+    const SliceOrientation orientation,
+    const SliceAlignment alignment)
 {
     OrthogonalSliceGeometry result;
     result.orientation_ = orientation;
@@ -160,18 +191,22 @@ OrthogonalSliceGeometry OrthogonalSliceGeometry::fromImageGeometry(
 
     const auto& dimensions = geometry.dimensions();
     const auto imageAxisByLpsAxis = closestImageAxesByLpsAxis(geometry);
-    const bool useNativeDisplayAxes = std::any_of(
-        dimensions.begin(), dimensions.end(), [](const std::size_t size) {
-            return size == 1;
-        });
+    const bool useNativeDisplayAxes = alignment == SliceAlignment::Native
+        || std::any_of(
+            dimensions.begin(), dimensions.end(), [](const std::size_t size) {
+                return size == 1;
+            });
     std::size_t horizontalImageAxis = 3;
     std::size_t verticalImageAxis = 3;
+    std::size_t normalImageAxis = 3;
     if(useNativeDisplayAxes)
     {
         horizontalImageAxis = imageAxisByLpsAxis[dominantAxis(
             result.horizontalDirectionLps_)];
         verticalImageAxis = imageAxisByLpsAxis[dominantAxis(
             result.verticalDirectionLps_)];
+        normalImageAxis = imageAxisByLpsAxis[dominantAxis(
+            result.normalDirectionLps_)];
 
         // A singleton dimension is an acquisition plane rather than a sampled
         // 3-D volume. Keep all three 2-D panes on the closest native voxel axes
@@ -180,8 +215,31 @@ OrthogonalSliceGeometry OrthogonalSliceGeometry::fromImageGeometry(
             geometry, imageAxisByLpsAxis, result.horizontalDirectionLps_);
         result.verticalDirectionLps_ = nativeDirectionClosestTo(
             geometry, imageAxisByLpsAxis, result.verticalDirectionLps_);
-        result.normalDirectionLps_ = nativeDirectionClosestTo(
+
+        // Preserve the native plane even for a sheared (for example,
+        // gantry-tilted) stack. Reslice direction cosines must be orthonormal,
+        // so remove any numerical in-plane skew before deriving the plane
+        // normal. Translating a source slice within its own plane does not
+        // change that plane.
+        const double verticalAlongHorizontal = dot(
+            result.verticalDirectionLps_, result.horizontalDirectionLps_);
+        for(std::size_t axis = 0; axis < 3; ++axis)
+        {
+            result.verticalDirectionLps_[axis] -= verticalAlongHorizontal
+                * result.horizontalDirectionLps_[axis];
+        }
+        result.verticalDirectionLps_ = normalized(result.verticalDirectionLps_);
+        result.normalDirectionLps_ = normalized(cross(
+            result.horizontalDirectionLps_, result.verticalDirectionLps_));
+        const auto targetNormal = nativeDirectionClosestTo(
             geometry, imageAxisByLpsAxis, result.normalDirectionLps_);
+        if(dot(result.normalDirectionLps_, targetNormal) < 0.0)
+        {
+            for(auto& value : result.normalDirectionLps_)
+            {
+                value = -value;
+            }
+        }
     }
 
     const ImageGeometry::Vector centerIndex{{
@@ -190,8 +248,27 @@ OrthogonalSliceGeometry OrthogonalSliceGeometry::fromImageGeometry(
         (static_cast<double>(dimensions[2]) - 1.0) / 2.0,
     }};
     result.referenceLps_ = geometry.indexToPhysical(centerIndex);
-    result.outputSpacing_ =
-        *std::min_element(geometry.spacing().begin(), geometry.spacing().end());
+    if(useNativeDisplayAxes)
+    {
+        result.outputSpacing_ = std::min(
+            geometry.spacing()[horizontalImageAxis]
+                * length({{
+                    geometry.direction()[0][horizontalImageAxis],
+                    geometry.direction()[1][horizontalImageAxis],
+                    geometry.direction()[2][horizontalImageAxis],
+                }}),
+            geometry.spacing()[verticalImageAxis]
+                * length({{
+                    geometry.direction()[0][verticalImageAxis],
+                    geometry.direction()[1][verticalImageAxis],
+                    geometry.direction()[2][verticalImageAxis],
+                }}));
+    }
+    else
+    {
+        result.outputSpacing_ = *std::min_element(
+            geometry.spacing().begin(), geometry.spacing().end());
+    }
     auto oneMillimeterAlongNormal = result.referenceLps_;
     for(std::size_t axis = 0; axis < 3; ++axis)
     {
@@ -212,6 +289,22 @@ OrthogonalSliceGeometry OrthogonalSliceGeometry::fromImageGeometry(
         throw std::invalid_argument("Image geometry cannot define a slice step");
     }
     result.sliceStep_ = 1.0 / std::sqrt(indexDistanceSquared);
+    if(useNativeDisplayAxes)
+    {
+        ImageGeometry::Vector nativeSliceDisplacement{};
+        for(std::size_t axis = 0; axis < 3; ++axis)
+        {
+            nativeSliceDisplacement[axis] =
+                geometry.direction()[axis][normalImageAxis]
+                * geometry.spacing()[normalImageAxis];
+        }
+        result.sliceStep_ = std::abs(dot(
+            nativeSliceDisplacement, result.normalDirectionLps_));
+        if(!std::isfinite(result.sliceStep_) || result.sliceStep_ <= 1.0e-12)
+        {
+            throw std::invalid_argument("Image geometry cannot define native slice spacing");
+        }
+    }
 
     double horizontalMaximum = -std::numeric_limits<double>::infinity();
     double verticalMaximum = -std::numeric_limits<double>::infinity();

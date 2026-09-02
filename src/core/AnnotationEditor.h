@@ -25,7 +25,9 @@ enum class PaintOverMode
 class AnnotationEditor
 {
 public:
-    void setAnnotation(const std::shared_ptr<Annotation>& annotation);
+    void setAnnotation(
+        const std::shared_ptr<Annotation>& annotation,
+        SliceAlignment alignment = SliceAlignment::Patient);
     void clearAnnotation() noexcept;
     [[nodiscard]] const std::shared_ptr<Annotation>& annotation() const noexcept;
 

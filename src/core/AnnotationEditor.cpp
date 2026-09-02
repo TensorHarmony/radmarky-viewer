@@ -37,10 +37,37 @@ std::optional<std::size_t> nearestVoxelOffset(
                            + dimensions[1] * static_cast<std::size_t>(index[2]));
 }
 
+bool belongsOnlyToCurrentAxialSlice(
+    const ImageGeometry& geometry,
+    const OrthogonalSliceGeometry& slice,
+    const ImageGeometry::Vector& samplePoint,
+    const std::size_t offset)
+{
+    // With an oblique native grid, a voxel near a patient-axial slice boundary
+    // can be the nearest-neighbor sample on two displayed slices. Editing that
+    // voxel would make a 2-D brush appear to affect an adjacent slice. Leave
+    // such ambiguous boundary voxels untouched instead.
+    for(const double sign : {-1.0, 1.0})
+    {
+        auto adjacentPoint = samplePoint;
+        for(std::size_t axis = 0; axis < 3; ++axis)
+        {
+            adjacentPoint[axis] += sign * slice.sliceStep()
+                * slice.normalDirectionLps()[axis];
+        }
+        if(nearestVoxelOffset(geometry, adjacentPoint) == offset)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 } // namespace
 
 void AnnotationEditor::setAnnotation(
-    const std::shared_ptr<Annotation>& annotation)
+    const std::shared_ptr<Annotation>& annotation,
+    const SliceAlignment alignment)
 {
     if(annotation && annotation->kind() != AnnotationKind::LabelMap)
     {
@@ -50,7 +77,7 @@ void AnnotationEditor::setAnnotation(
     if(annotation_)
     {
         sliceGeometry_ = OrthogonalSliceGeometry::fromImageGeometry(
-            annotation_->volume().geometry(), SliceOrientation::Axial);
+            annotation_->volume().geometry(), SliceOrientation::Axial, alignment);
     }
     else
     {
@@ -199,7 +226,9 @@ bool AnnotationEditor::stamp(const ImageGeometry::Vector& physicalPoint)
                     slice, stampCenter, physicalPoint,
                     static_cast<double>(dx), static_cast<double>(dy));
                 const auto offset = nearestVoxelOffset(geometry, samplePoint);
-                if(!offset)
+                if(!offset
+                   || !belongsOnlyToCurrentAxialSlice(
+                       geometry, slice, samplePoint, *offset))
                 {
                     continue;
                 }
@@ -334,7 +363,9 @@ bool AnnotationEditor::eraseConnectedComponentOnSlice(
         const auto samplePoint = brushPointOnSliceGrid(
             slice, cell, physicalPoint, 0.0, 0.0);
         const auto offset = nearestVoxelOffset(geometry, samplePoint);
-        if(!offset || values[*offset] != label)
+        if(!offset || values[*offset] != label
+           || !belongsOnlyToCurrentAxialSlice(
+               geometry, slice, samplePoint, *offset))
         {
             continue;
         }

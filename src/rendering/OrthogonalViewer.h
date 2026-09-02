@@ -124,6 +124,7 @@ signals:
     void overallLabelOpacityChanged(double opacity);
 
 private:
+    void applySliceAlignment(core::SliceAlignment alignment);
     void selectPhysicalPoint(double x, double y, double z);
     void inspectPhysicalPoint(
         double x,
