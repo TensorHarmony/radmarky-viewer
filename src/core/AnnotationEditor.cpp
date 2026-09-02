@@ -5,9 +5,39 @@
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
+#include <unordered_set>
 
 namespace radmarky::core
 {
+namespace
+{
+
+std::optional<std::size_t> nearestVoxelOffset(
+    const ImageGeometry& geometry,
+    const ImageGeometry::Vector& physicalPoint)
+{
+    const auto continuous = geometry.physicalToContinuousIndex(physicalPoint);
+    std::array<long, 3> index{};
+    const auto& dimensions = geometry.dimensions();
+    for(std::size_t axis = 0; axis < index.size(); ++axis)
+    {
+        if(!std::isfinite(continuous[axis]))
+        {
+            return std::nullopt;
+        }
+        index[axis] = std::lround(continuous[axis]);
+        if(index[axis] < 0
+           || index[axis] >= static_cast<long>(dimensions[axis]))
+        {
+            return std::nullopt;
+        }
+    }
+    return static_cast<std::size_t>(index[0])
+        + dimensions[0] * (static_cast<std::size_t>(index[1])
+                           + dimensions[1] * static_cast<std::size_t>(index[2]));
+}
+
+} // namespace
 
 void AnnotationEditor::setAnnotation(
     const std::shared_ptr<Annotation>& annotation)
@@ -17,6 +47,15 @@ void AnnotationEditor::setAnnotation(
         throw std::invalid_argument("Only label-map annotations can be edited");
     }
     annotation_ = annotation;
+    if(annotation_)
+    {
+        sliceGeometry_ = OrthogonalSliceGeometry::fromImageGeometry(
+            annotation_->volume().geometry(), SliceOrientation::Axial);
+    }
+    else
+    {
+        sliceGeometry_.reset();
+    }
     pending_.clear();
     pendingLookup_.clear();
     undoStack_.clear();
@@ -28,6 +67,7 @@ void AnnotationEditor::setAnnotation(
 void AnnotationEditor::clearAnnotation() noexcept
 {
     annotation_.reset();
+    sliceGeometry_.reset();
     pending_.clear();
     pendingLookup_.clear();
     undoStack_.clear();
@@ -97,31 +137,16 @@ void AnnotationEditor::beginStroke(const bool erase)
 
 bool AnnotationEditor::stamp(const ImageGeometry::Vector& physicalPoint)
 {
-    if(!strokeActive_ || !annotation_)
+    if(!strokeActive_ || !annotation_ || !sliceGeometry_)
     {
         return false;
     }
     auto& volume = annotation_->editableVolume();
     auto& image = volume.image();
-    const auto continuous = volume.geometry().physicalToContinuousIndex(physicalPoint);
-    for(const double component : continuous)
-    {
-        if(!std::isfinite(component))
-        {
-            return false;
-        }
-    }
-
-    const auto& dimensions = volume.geometry().dimensions();
-    const std::array<long, 3> center{{
-        std::lround(continuous[0]),
-        std::lround(continuous[1]),
-        std::lround(continuous[2]),
-    }};
-    const long centerX = center[0];
-    const long centerY = center[1];
-    const long axial = center[2];
-    if(axial < 0 || axial >= static_cast<long>(dimensions[2]))
+    const auto& geometry = volume.geometry();
+    const auto& slice = *sliceGeometry_;
+    const auto center = brushGridIndex(slice, physicalPoint);
+    if(!center)
     {
         return false;
     }
@@ -133,32 +158,35 @@ bool AnnotationEditor::stamp(const ImageGeometry::Vector& physicalPoint)
     const BrushFootprint footprint(brushRadius_, brushShape_);
     const int firstOffset = footprint.firstOffset();
     const int lastOffset = footprint.lastOffset();
-    const auto sizeX = dimensions[0];
-    const auto sizeY = dimensions[1];
     float* const values = image.GetBufferPointer();
 
-    auto lineStart = previousStampCenter_.value_or(center);
-    if(lineStart[2] != axial)
+    const double normalCoordinate = slice.normalCoordinate(physicalPoint);
+    auto lineStart = previousStampCenter_.value_or(
+        StampCenter{*center, normalCoordinate});
+    const double planeTolerance =
+        1.0e-6 * std::max(1.0, slice.sliceStep());
+    if(std::abs(lineStart.normalCoordinate - normalCoordinate) > planeTolerance)
     {
-        lineStart = center;
+        lineStart = StampCenter{*center, normalCoordinate};
     }
-    const long lineDx = centerX - lineStart[0];
-    const long lineDy = centerY - lineStart[1];
+    const long lineDx = (*center)[0] - lineStart.grid[0];
+    const long lineDy = (*center)[1] - lineStart.grid[1];
     const long lineSteps = std::max(std::abs(lineDx), std::abs(lineDy));
-    previousStampCenter_ = center;
+    previousStampCenter_ = StampCenter{*center, normalCoordinate};
 
     for(long step = 0; step <= lineSteps; ++step)
     {
-        const long stampX = lineSteps == 0
-            ? centerX
-            : lineStart[0] + std::lround(
+        const long stampHorizontal = lineSteps == 0
+            ? (*center)[0]
+            : lineStart.grid[0] + std::lround(
                 static_cast<double>(lineDx) * static_cast<double>(step)
                 / static_cast<double>(lineSteps));
-        const long stampY = lineSteps == 0
-            ? centerY
-            : lineStart[1] + std::lround(
+        const long stampVertical = lineSteps == 0
+            ? (*center)[1]
+            : lineStart.grid[1] + std::lround(
                 static_cast<double>(lineDy) * static_cast<double>(step)
                 / static_cast<double>(lineSteps));
+        const BrushGridIndex stampCenter{{stampHorizontal, stampVertical}};
         for(int dy = firstOffset; dy <= lastOffset; ++dy)
         {
             for(int dx = firstOffset; dx <= lastOffset; ++dx)
@@ -167,17 +195,15 @@ bool AnnotationEditor::stamp(const ImageGeometry::Vector& physicalPoint)
                 {
                     continue;
                 }
-                const long x = stampX + dx;
-                const long y = stampY + dy;
-                if(x < 0 || y < 0 || x >= static_cast<long>(sizeX)
-                   || y >= static_cast<long>(sizeY))
+                const auto samplePoint = brushPointOnSliceGrid(
+                    slice, stampCenter, physicalPoint,
+                    static_cast<double>(dx), static_cast<double>(dy));
+                const auto offset = nearestVoxelOffset(geometry, samplePoint);
+                if(!offset)
                 {
                     continue;
                 }
-                const std::size_t offset = static_cast<std::size_t>(x)
-                    + sizeX * (static_cast<std::size_t>(y)
-                               + sizeY * static_cast<std::size_t>(axial));
-                const float current = values[offset];
+                const float current = values[*offset];
                 const bool canPaint = paintOverMode_ == PaintOverMode::AllLabels
                     || (paintOverMode_ == PaintOverMode::OneLabel
                         && current == static_cast<float>(paintOverLabel_));
@@ -185,24 +211,24 @@ bool AnnotationEditor::stamp(const ImageGeometry::Vector& physicalPoint)
                 {
                     continue;
                 }
-                if(values[offset] == replacement)
+                if(values[*offset] == replacement)
                 {
                     continue;
                 }
-                const auto existing = pendingLookup_.find(offset);
+                const auto existing = pendingLookup_.find(*offset);
                 if(existing == pendingLookup_.end())
                 {
-                    pending_.push_back({offset, values[offset], replacement});
-                    pendingLookup_.emplace(offset, pending_.size() - 1);
+                    pending_.push_back({*offset, values[*offset], replacement});
+                    pendingLookup_.emplace(*offset, pending_.size() - 1);
                 }
                 else
                 {
                     pending_[existing->second].after = replacement;
                 }
                 annotation_->updateLabelLedger(
-                    static_cast<std::uint16_t>(std::lround(values[offset])),
+                    static_cast<std::uint16_t>(std::lround(values[*offset])),
                     static_cast<std::uint16_t>(std::lround(replacement)));
-                values[offset] = replacement;
+                values[*offset] = replacement;
                 changed = true;
             }
         }
@@ -256,86 +282,88 @@ void AnnotationEditor::cancelStroke()
 bool AnnotationEditor::eraseConnectedComponentOnSlice(
     const ImageGeometry::Vector& physicalPoint)
 {
-    if(!annotation_ || strokeActive_)
+    if(!annotation_ || !sliceGeometry_ || strokeActive_)
     {
         return false;
     }
 
     auto& volume = annotation_->editableVolume();
     auto& image = volume.image();
-    const auto continuous =
-        volume.geometry().physicalToContinuousIndex(physicalPoint);
-    for(const double component : continuous)
+    const auto& geometry = volume.geometry();
+    const auto& slice = *sliceGeometry_;
+    const auto seed = brushGridIndex(slice, physicalPoint);
+    if(!seed)
     {
-        if(!std::isfinite(component))
-        {
-            return false;
-        }
+        return false;
     }
-
-    const auto& dimensions = volume.geometry().dimensions();
-    const std::array<long, 3> seed{{
-        std::lround(continuous[0]),
-        std::lround(continuous[1]),
-        std::lround(continuous[2]),
-    }};
-    for(std::size_t axis = 0; axis < seed.size(); ++axis)
+    const auto seedPoint = brushPointOnSliceGrid(
+        slice, *seed, physicalPoint, 0.0, 0.0);
+    const auto seedOffset = nearestVoxelOffset(geometry, seedPoint);
+    if(!seedOffset)
     {
-        if(seed[axis] < 0
-           || seed[axis] >= static_cast<long>(dimensions[axis]))
-        {
-            return false;
-        }
+        return false;
     }
-
-    const std::size_t sizeX = dimensions[0];
-    const std::size_t sizeY = dimensions[1];
-    const std::size_t planeSize = sizeX * sizeY;
-    const std::size_t seedOffset = static_cast<std::size_t>(seed[0])
-        + sizeX * static_cast<std::size_t>(seed[1])
-        + planeSize * static_cast<std::size_t>(seed[2]);
     float* const values = image.GetBufferPointer();
-    const float label = values[seedOffset];
+    const float label = values[*seedOffset];
     if(label == 0.0F || !std::isfinite(label))
     {
         return false;
     }
 
-    Stroke erasedComponent;
-    std::vector<std::size_t> pendingOffsets;
-    const auto eraseOffset = [&](const std::size_t offset) {
-        if(values[offset] != label)
-        {
-            return;
-        }
-        erasedComponent.push_back({offset, label, 0.0F});
-        pendingOffsets.push_back(offset);
-        annotation_->updateLabelLedger(
-            static_cast<std::uint16_t>(std::lround(label)), 0);
-        // Clearing on discovery also serves as the flood fill's visited mark.
-        values[offset] = 0.0F;
-    };
-    eraseOffset(seedOffset);
-
-    for(std::size_t next = 0; next < pendingOffsets.size(); ++next)
+    const std::size_t width = slice.width();
+    const std::size_t height = slice.height();
+    std::vector<std::uint8_t> visited(width * height, 0U);
+    std::vector<BrushGridIndex> pendingCells{*seed};
+    std::unordered_set<std::size_t> componentOffsets;
+    for(std::size_t next = 0; next < pendingCells.size(); ++next)
     {
-        const std::size_t offset = pendingOffsets[next];
-        const std::size_t inPlane = offset % planeSize;
-        const std::size_t y = inPlane / sizeX;
-        const std::size_t x = inPlane % sizeX;
-        if(x > 0) eraseOffset(offset - 1);
-        if(x + 1 < sizeX) eraseOffset(offset + 1);
-        if(y > 0) eraseOffset(offset - sizeX);
-        if(y + 1 < sizeY) eraseOffset(offset + sizeX);
-        if(x > 0 && y > 0) eraseOffset(offset - sizeX - 1);
-        if(x + 1 < sizeX && y > 0) eraseOffset(offset - sizeX + 1);
-        if(x > 0 && y + 1 < sizeY) eraseOffset(offset + sizeX - 1);
-        if(x + 1 < sizeX && y + 1 < sizeY)
+        const auto cell = pendingCells[next];
+        if(cell[0] < 0 || cell[1] < 0
+           || cell[0] >= static_cast<long>(width)
+           || cell[1] >= static_cast<long>(height))
         {
-            eraseOffset(offset + sizeX + 1);
+            continue;
+        }
+        const std::size_t cellOffset = static_cast<std::size_t>(cell[0])
+            + width * static_cast<std::size_t>(cell[1]);
+        if(visited[cellOffset] != 0U)
+        {
+            continue;
+        }
+        visited[cellOffset] = 1U;
+        const auto samplePoint = brushPointOnSliceGrid(
+            slice, cell, physicalPoint, 0.0, 0.0);
+        const auto offset = nearestVoxelOffset(geometry, samplePoint);
+        if(!offset || values[*offset] != label)
+        {
+            continue;
+        }
+        componentOffsets.insert(*offset);
+        for(long dy = -1; dy <= 1; ++dy)
+        {
+            for(long dx = -1; dx <= 1; ++dx)
+            {
+                if(dx != 0 || dy != 0)
+                {
+                    pendingCells.push_back({{cell[0] + dx, cell[1] + dy}});
+                }
+            }
         }
     }
 
+    Stroke erasedComponent;
+    erasedComponent.reserve(componentOffsets.size());
+    for(const std::size_t offset : componentOffsets)
+    {
+        erasedComponent.push_back({offset, label, 0.0F});
+        annotation_->updateLabelLedger(
+            static_cast<std::uint16_t>(std::lround(label)), 0);
+        values[offset] = 0.0F;
+    }
+    if(erasedComponent.empty())
+    {
+        return false;
+    }
     image.Modified();
     undoStack_.push_back(std::move(erasedComponent));
     redoStack_.clear();

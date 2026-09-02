@@ -1138,8 +1138,9 @@ ViewerToolbox::ViewerToolbox(QWidget* parent)
         brushRadiusSpin_->setValue(selectedRadius);
         brushRadiusSlider_->setValue(selectedRadius);
         emit brushRadiusChanged(selectedRadius);
-        applyPaintOverForActiveLabel();
+        rebuildPaintOverOptions();
         emit activeLabelChanged(label);
+        applyPaintOverForActiveLabel();
     };
     connect(
         activeLabelCombo_, &QComboBox::currentIndexChanged,
@@ -1760,17 +1761,8 @@ void ViewerToolbox::setAnnotationLabels(const QList<int>& labels)
         std::unique(sortedLabels.begin(), sortedLabels.end()),
         sortedLabels.end());
 
-    {
-        const QSignalBlocker paintOverBlocker(paintOverCombo_);
-        paintOverCombo_->clear();
-        paintOverCombo_->addItem(tr("All labels"), -1);
-        paintOverCombo_->addItem(tr("Clear Label"), 0);
-        for(const int label : sortedLabels)
-        {
-            paintOverCombo_->addItem(
-                labelIcon(label), tr("Label %1").arg(label), label);
-        }
-    }
+    annotationLabels_ = sortedLabels;
+    rebuildPaintOverOptions();
     applyPaintOverForActiveLabel();
 }
 
@@ -1820,17 +1812,51 @@ void ViewerToolbox::setPaintOverSelections(
         if(label >= 0 && label <= 65535
            && selection >= -1 && selection <= 65535)
         {
-            paintOverSelections_[label] = selection;
+            paintOverSelections_[label] = label == 0 && selection == 0
+                ? -1 : selection;
         }
     }
     applyPaintOverForActiveLabel();
 }
 
+bool ViewerToolbox::setPaintOverSelection(const int selection)
+{
+    const int index = paintOverCombo_->findData(selection);
+    if(index >= 0)
+    {
+        paintOverCombo_->setCurrentIndex(index);
+        return true;
+    }
+    return false;
+}
+
+void ViewerToolbox::rebuildPaintOverOptions()
+{
+    const QSignalBlocker blocker(paintOverCombo_);
+    paintOverCombo_->clear();
+    paintOverCombo_->addItem(tr("All labels"), -1);
+    if(activeLabel() != 0)
+    {
+        paintOverCombo_->addItem(tr("Clear Label"), 0);
+    }
+    for(const int label : annotationLabels_)
+    {
+        paintOverCombo_->addItem(
+            labelIcon(label), tr("Label %1").arg(label), label);
+    }
+}
+
 void ViewerToolbox::applyPaintOverForActiveLabel()
 {
-    const auto selected = paintOverSelections_.find(activeLabel());
-    const int desired =
+    const int label = activeLabel();
+    const auto selected = paintOverSelections_.find(label);
+    int desired =
         selected != paintOverSelections_.end() ? selected->second : -1;
+    if(label == 0 && desired == 0)
+    {
+        desired = -1;
+        paintOverSelections_[0] = -1;
+    }
     const int index = paintOverCombo_->findData(desired);
     {
         const QSignalBlocker blocker(paintOverCombo_);

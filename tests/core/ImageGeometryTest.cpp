@@ -160,16 +160,22 @@ int main()
 
     const auto axial = radmarky::core::OrthogonalSliceGeometry::fromImageGeometry(
         geometry, radmarky::core::SliceOrientation::Axial);
-    const radmarky::core::ImageGeometry::Vector brushCenter{{2.0, 2.0, 3.0}};
+    const auto brushCenter = geometry.indexToPhysical({{2.0, 2.0, 3.0}});
+    const auto brushGrid = radmarky::core::brushGridIndex(axial, brushCenter);
+    passed &= expectTrue(brushGrid.has_value(), "brush grid center");
+    if(!brushGrid)
+    {
+        return 1;
+    }
+    const double brushHorizontal = axial.horizontalMinimum()
+        + static_cast<double>((*brushGrid)[0]) * axial.outputSpacing();
+    const double brushVertical = axial.verticalMinimum()
+        + static_cast<double>((*brushGrid)[1]) * axial.outputSpacing();
     const auto projectBrushOffset =
         [&](const double dx, const double dy) {
-            auto indexAtOffset = brushCenter;
-            indexAtOffset[0] += dx;
-            indexAtOffset[1] += dy;
-            const auto physical = geometry.indexToPhysical(indexAtOffset);
             return radmarky::core::BrushOutlinePoint{{
-                axial.horizontalCoordinate(physical),
-                axial.verticalCoordinate(physical),
+                brushHorizontal + dx * axial.outputSpacing(),
+                brushVertical + dy * axial.outputSpacing(),
             }};
         };
     for(int brushSize = 1; brushSize <= 6; ++brushSize)
@@ -180,7 +186,7 @@ int main()
         {
             const radmarky::core::BrushFootprint footprint(brushSize, shape);
             const auto outline = radmarky::core::brushOutlinePoints(
-                footprint, geometry, axial, brushCenter);
+                footprint, axial, brushCenter);
             const std::size_t expectedPointCount =
                 shape == radmarky::core::BrushShape::Square ? 4U : 48U;
             passed &= expectTrue(
@@ -199,7 +205,7 @@ int main()
                 outlineCenter,
                 projectBrushOffset(
                     footprint.centerOffset(), footprint.centerOffset()),
-                "direction-aware brush center");
+                "screen-aligned brush center");
 
             const double centerOffset = footprint.centerOffset();
             if(shape == radmarky::core::BrushShape::Square)
@@ -220,7 +226,7 @@ int main()
                     passed &= expectOutlinePointNear(
                         outline[corner],
                         expectedCorners[corner],
-                        "direction-aware square corner");
+                        "screen-aligned square corner");
                 }
             }
             else
@@ -240,7 +246,7 @@ int main()
                     passed &= expectOutlinePointNear(
                         outline[cardinal * 12],
                         expectedCardinalPoints[cardinal],
-                        "direction-aware circle cardinal point");
+                        "screen-aligned circle cardinal point");
                 }
             }
         }

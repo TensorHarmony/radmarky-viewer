@@ -786,10 +786,11 @@ MainWindow::MainWindow(QWidget* parent)
     }
     brushAction_->setToolTip(
         tr("Brush: paint the selected label map in the axial view. "
-           "Press 1–9 to choose a label, [ and ] to change brush size"));
+           "Press 1–9 to choose a label, Shift+0–9 to choose the paint-over "
+           "label, and [ or ] to change brush size"));
     eraseAction_->setToolTip(
         tr("Erase: select Clear (Eraser) for the active label. "
-           "Press 0 to erase"));
+           "Press 0 to erase; press 0 again to erase all labels"));
     scopedEraseAction_->setToolTip(
         tr("Scoped Erase: click a labeled voxel in the axial view to clear "
            "its 8-connected component on that slice"));
@@ -865,7 +866,7 @@ MainWindow::MainWindow(QWidget* parent)
     annotationMenu->addSeparator();
     auto* const activeLabelMenu = annotationMenu->addMenu(tr("Active &Label"));
     activeLabelMenu->setObjectName(QStringLiteral("activeLabelMenu"));
-    activeLabelActions_.reserve(10);
+    activeLabelActions_.reserve(22);
     for(int label = 1; label <= 9; ++label)
     {
         auto* const action = activeLabelMenu->addAction(
@@ -889,6 +890,24 @@ MainWindow::MainWindow(QWidget* parent)
         activateAnnotationDigit(0);
     });
     activeLabelActions_.push_back(eraseDigitAction);
+
+    for(int label = 0; label <= 9; ++label)
+    {
+        auto* const action = new QAction(
+            label == 0 ? tr("Paint over clear label")
+                       : tr("Paint over label %1").arg(label),
+            this);
+        action->setObjectName(
+            QStringLiteral("paintOverLabel%1ShortcutAction").arg(label));
+        action->setShortcut(QKeySequence(
+            Qt::SHIFT | static_cast<Qt::Key>(Qt::Key_0 + label)));
+        action->setEnabled(false);
+        addAction(action);
+        connect(action, &QAction::triggered, this, [this, label] {
+            activatePaintOverDigit(label);
+        });
+        activeLabelActions_.push_back(action);
+    }
 
     annotationMenu->addSeparator();
     auto* const decreaseBrushAction =
@@ -2163,6 +2182,7 @@ void MainWindow::updateViewerShortcutActions()
         const QSignalBlocker blocker(annotationVisibilityAction_);
         annotationVisibilityAction_->setChecked(false);
         annotationsVisibleBeforeHide_.clear();
+        viewer_->setAnnotationHiddenIndicatorVisible(false);
     }
 }
 
@@ -2225,6 +2245,11 @@ void MainWindow::activateAnnotationDigit(const int digit)
     }
     if(digit == 0)
     {
+        if(eraseAction_->isChecked())
+        {
+            (void)toolbox_->setPaintOverSelection(-1);
+            return;
+        }
         eraseAction_->setChecked(true);
         toolbox_->setActiveLabel(0);
         viewer_->setEraseTool();
@@ -2233,6 +2258,18 @@ void MainWindow::activateAnnotationDigit(const int digit)
     brushAction_->setChecked(true);
     viewer_->setBrushTool();
     toolbox_->setActiveLabel(digit);
+}
+
+void MainWindow::activatePaintOverDigit(const int digit)
+{
+    if(digit < 0 || digit > 9 || !ensureEditableAnnotationForShortcut())
+    {
+        return;
+    }
+    if(toolbox_->setPaintOverSelection(digit) && digit > 0)
+    {
+        viewer_->goToNearestAxialSliceContainingLabel(digit);
+    }
 }
 
 void MainWindow::loadAnnotations(const QStringList& fileNames)
@@ -3514,6 +3551,8 @@ void MainWindow::setAnnotationVisibility(const int index, const bool visible)
 
 void MainWindow::setAnnotationsTemporarilyHidden(const bool hidden)
 {
+    viewer_->setAnnotationHiddenIndicatorVisible(
+        hidden && !annotations_.empty());
     if(hidden)
     {
         annotationsVisibleBeforeHide_.clear();

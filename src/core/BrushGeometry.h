@@ -4,6 +4,7 @@
 #include "core/OrthogonalSliceGeometry.h"
 
 #include <array>
+#include <optional>
 #include <vector>
 
 namespace radmarky::core
@@ -36,14 +37,27 @@ private:
 };
 
 using BrushOutlinePoint = std::array<double, 2>;
+using BrushGridIndex = std::array<long, 2>;
 
-// Projects the exact index-space footprint used by AnnotationEditor into the
-// fixed display plane. This preserves the half-voxel anchor of even sizes for
-// flipped, permuted, rotated, and anisotropic image geometries.
+// Locates a physical point on the fixed display grid used by the reslicer.
+[[nodiscard]] std::optional<BrushGridIndex> brushGridIndex(
+    const OrthogonalSliceGeometry& slice,
+    const ImageGeometry::Vector& physicalPoint);
+
+// Returns a physical point at an offset from a display-grid brush center while
+// preserving the plane normal of planePoint.
+[[nodiscard]] ImageGeometry::Vector brushPointOnSliceGrid(
+    const OrthogonalSliceGeometry& slice,
+    const BrushGridIndex& center,
+    const ImageGeometry::Vector& planePoint,
+    double horizontalOffset,
+    double verticalOffset);
+
+// Builds the screen-aligned outline of the same display-grid footprint used by
+// AnnotationEditor. Even sizes retain their half-voxel visual anchor.
 [[nodiscard]] std::vector<BrushOutlinePoint> brushOutlinePoints(
     const BrushFootprint& footprint,
-    const ImageGeometry& geometry,
     const OrthogonalSliceGeometry& slice,
-    const ImageGeometry::Vector& centerIndex);
+    const ImageGeometry::Vector& centerPhysical);
 
 } // namespace radmarky::core

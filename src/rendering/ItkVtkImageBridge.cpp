@@ -18,6 +18,35 @@ namespace radmarky::rendering
 namespace
 {
 
+bool sameGrid(
+    const core::ImageGeometry& first,
+    const core::ImageGeometry& second)
+{
+    if(first.dimensions() != second.dimensions())
+    {
+        return false;
+    }
+    constexpr double tolerance = 1.0e-9;
+    for(std::size_t axis = 0; axis < 3; ++axis)
+    {
+        if(std::abs(first.spacing()[axis] - second.spacing()[axis]) > tolerance
+           || std::abs(first.origin()[axis] - second.origin()[axis]) > tolerance)
+        {
+            return false;
+        }
+        for(std::size_t column = 0; column < 3; ++column)
+        {
+            if(std::abs(
+                   first.direction()[axis][column]
+                   - second.direction()[axis][column]) > tolerance)
+            {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 vtkSmartPointer<vtkImageData> describeImage(
     const core::Volume::ImageType& image)
 {
@@ -124,12 +153,6 @@ vtkSmartPointer<vtkImageData> ItkVtkImageBridge::copyComparisonToVtk(
     const core::Volume& first,
     const core::Volume& second)
 {
-    if(first.geometry().dimensions() != second.geometry().dimensions())
-    {
-        throw std::invalid_argument(
-            "Compared annotations must have matching dimensions");
-    }
-
     const auto& firstImage = first.image();
     auto vtkImage = allocateLike(firstImage, VTK_UNSIGNED_CHAR);
     const auto pixelCount =
@@ -138,10 +161,67 @@ vtkSmartPointer<vtkImageData> ItkVtkImageBridge::copyComparisonToVtk(
     const auto* const secondValues = second.image().GetBufferPointer();
     auto* const destination =
         static_cast<unsigned char*>(vtkImage->GetScalarPointer());
-    for(itk::SizeValueType index = 0; index < pixelCount; ++index)
+    if(sameGrid(first.geometry(), second.geometry()))
     {
-        destination[index] = static_cast<unsigned char>(
-            compareValues(firstValues[index], secondValues[index]));
+        for(itk::SizeValueType index = 0; index < pixelCount; ++index)
+        {
+            destination[index] = static_cast<unsigned char>(
+                compareValues(firstValues[index], secondValues[index]));
+        }
+        return vtkImage;
+    }
+
+    const auto& dimensions = first.geometry().dimensions();
+    const auto& secondDimensions = second.geometry().dimensions();
+    const core::ImageGeometry::Vector zero{{0.0, 0.0, 0.0}};
+    const auto secondBase = second.geometry().physicalToContinuousIndex(
+        first.geometry().indexToPhysical(zero));
+    std::array<core::ImageGeometry::Vector, 3> secondSteps{};
+    for(std::size_t firstAxis = 0; firstAxis < 3; ++firstAxis)
+    {
+        auto unit = zero;
+        unit[firstAxis] = 1.0;
+        const auto secondAtUnit = second.geometry().physicalToContinuousIndex(
+            first.geometry().indexToPhysical(unit));
+        for(std::size_t secondAxis = 0; secondAxis < 3; ++secondAxis)
+        {
+            secondSteps[firstAxis][secondAxis] =
+                secondAtUnit[secondAxis] - secondBase[secondAxis];
+        }
+    }
+    for(std::size_t z = 0; z < dimensions[2]; ++z)
+    {
+        for(std::size_t y = 0; y < dimensions[1]; ++y)
+        {
+            for(std::size_t x = 0; x < dimensions[0]; ++x)
+            {
+                const std::size_t offset =
+                    x + dimensions[0] * (y + dimensions[1] * z);
+                std::array<long, 3> secondIndex{};
+                bool secondInside = true;
+                for(std::size_t axis = 0; axis < 3; ++axis)
+                {
+                    const double continuous = secondBase[axis]
+                        + static_cast<double>(x) * secondSteps[0][axis]
+                        + static_cast<double>(y) * secondSteps[1][axis]
+                        + static_cast<double>(z) * secondSteps[2][axis];
+                    secondIndex[axis] = std::lround(continuous);
+                    secondInside = secondInside && secondIndex[axis] >= 0
+                        && secondIndex[axis]
+                            < static_cast<long>(secondDimensions[axis]);
+                }
+                const std::size_t secondOffset = secondInside
+                    ? static_cast<std::size_t>(secondIndex[0])
+                        + secondDimensions[0]
+                            * (static_cast<std::size_t>(secondIndex[1])
+                               + secondDimensions[1]
+                                   * static_cast<std::size_t>(secondIndex[2]))
+                    : 0;
+                destination[offset] = static_cast<unsigned char>(compareValues(
+                    firstValues[offset],
+                    secondInside ? secondValues[secondOffset] : 0.0F));
+            }
+        }
     }
     return vtkImage;
 }

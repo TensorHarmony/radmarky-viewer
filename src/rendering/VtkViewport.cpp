@@ -14,7 +14,9 @@
 #include <QEvent>
 #include <QGuiApplication>
 #include <QImage>
+#include <QLabel>
 #include <QMouseEvent>
+#include <QPainter>
 #include <QSize>
 #include <QSizePolicy>
 #include <QVBoxLayout>
@@ -75,6 +77,20 @@ enum class DragMode
 
 const QColor kDarkCursorTint(QStringLiteral("#274957"));
 const QColor kLightCursorTint(QStringLiteral("#e8f0f4"));
+const QColor kViewportOverlayTint(QStringLiteral("#ffb000"));
+constexpr int annotationHiddenIndicatorSize = 22;
+constexpr int annotationHiddenIndicatorMargin = 12;
+
+QPixmap annotationHiddenPixmap()
+{
+    QPixmap pixmap = ui::svgPixmap(
+        QStringLiteral(":/icons/eye-hide.svg"),
+        QSize(annotationHiddenIndicatorSize, annotationHiddenIndicatorSize));
+    QPainter painter(&pixmap);
+    painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
+    painter.fillRect(pixmap.rect(), kViewportOverlayTint);
+    return pixmap;
+}
 
 void setRulerShape(
     vtkPolyData& rulerData,
@@ -220,6 +236,13 @@ void setClosedOutline(
 {
     auto points = vtkSmartPointer<vtkPoints>::New();
     auto lines = vtkSmartPointer<vtkCellArray>::New();
+    if(outline.empty())
+    {
+        outlineData.SetPoints(points);
+        outlineData.SetLines(lines);
+        outlineData.Modified();
+        return;
+    }
     lines->InsertNextCell(static_cast<vtkIdType>(outline.size() + 1));
     for(const auto& point : outline)
     {
@@ -228,6 +251,62 @@ void setClosedOutline(
         lines->InsertCellPoint(id);
     }
     lines->InsertCellPoint(0);
+    outlineData.SetPoints(points);
+    outlineData.SetLines(lines);
+    outlineData.Modified();
+}
+
+void setDashedClosedOutline(
+    vtkPolyData& outlineData,
+    const std::vector<core::BrushOutlinePoint>& outline,
+    const double depth,
+    const double dashLength,
+    const double gapLength)
+{
+    auto points = vtkSmartPointer<vtkPoints>::New();
+    auto lines = vtkSmartPointer<vtkCellArray>::New();
+    bool drawing = true;
+    double patternRemaining = dashLength;
+    for(std::size_t edge = 0; edge < outline.size(); ++edge)
+    {
+        const auto& start = outline[edge];
+        const auto& end = outline[(edge + 1) % outline.size()];
+        const double deltaX = end[0] - start[0];
+        const double deltaY = end[1] - start[1];
+        const double length = std::hypot(deltaX, deltaY);
+        if(length <= 1.0e-12)
+        {
+            continue;
+        }
+        double position = 0.0;
+        while(position < length - 1.0e-12)
+        {
+            const double chunk = std::min(patternRemaining, length - position);
+            if(drawing && chunk > 1.0e-12)
+            {
+                const double firstFraction = position / length;
+                const double lastFraction = (position + chunk) / length;
+                vtkIdType pointIds[2]{
+                    points->InsertNextPoint(
+                        start[0] + deltaX * firstFraction,
+                        start[1] + deltaY * firstFraction,
+                        depth),
+                    points->InsertNextPoint(
+                        start[0] + deltaX * lastFraction,
+                        start[1] + deltaY * lastFraction,
+                        depth),
+                };
+                lines->InsertNextCell(2, pointIds);
+            }
+            position += chunk;
+            patternRemaining -= chunk;
+            if(patternRemaining <= 1.0e-12)
+            {
+                drawing = !drawing;
+                patternRemaining = drawing ? dashLength : gapLength;
+            }
+        }
+    }
     outlineData.SetPoints(points);
     outlineData.SetLines(lines);
     outlineData.Modified();
@@ -391,6 +470,7 @@ struct VtkViewport::Impl
     vtkSmartPointer<vtkTextActor> measurementLabelActor;
     vtkSmartPointer<vtkTextActor> orientationActor;
     vtkSmartPointer<vtkTextActor> sliceCounterActor;
+    QLabel* annotationHiddenIndicator = nullptr;
     std::vector<AnnotationPipeline> annotations;
     std::optional<AnnotationPipeline> annotationComparison;
     std::optional<core::ImageGeometry> imageGeometry;
@@ -409,6 +489,8 @@ struct VtkViewport::Impl
     int samplingSideLength = 1;
     int brushRadius = 1;
     bool brushCircular = false;
+    int brushLabel = 1;
+    int eraseTargetLabel = -1;
     double fitParallelScale = 0.0;
     bool zoomThumbnailAttached = false;
     bool panGrabCursorActive = false;
@@ -435,6 +517,24 @@ VtkViewport::VtkViewport(
     impl_->widget->setMouseTracking(true);
     impl_->widget->installEventFilter(this);
     layout->addWidget(impl_->widget);
+
+    if(orientation == core::SliceOrientation::Axial)
+    {
+        impl_->annotationHiddenIndicator = new QLabel(impl_->widget);
+        impl_->annotationHiddenIndicator->setObjectName(
+            QStringLiteral("annotationHiddenIndicator"));
+        impl_->annotationHiddenIndicator->setAccessibleName(
+            tr("Annotation overlays hidden"));
+        impl_->annotationHiddenIndicator->setToolTip(
+            tr("Annotation overlays hidden (H)"));
+        impl_->annotationHiddenIndicator->setAttribute(
+            Qt::WA_TransparentForMouseEvents);
+        impl_->annotationHiddenIndicator->setFixedSize(
+            annotationHiddenIndicatorSize,
+            annotationHiddenIndicatorSize);
+        impl_->annotationHiddenIndicator->setPixmap(annotationHiddenPixmap());
+        impl_->annotationHiddenIndicator->hide();
+    }
 
     impl_->renderWindow = vtkSmartPointer<vtkGenericOpenGLRenderWindow>::New();
     impl_->renderer = vtkSmartPointer<vtkRenderer>::New();
@@ -770,6 +870,20 @@ void VtkViewport::setAnnotationVisibility(
     impl_->renderWindow->Render();
 }
 
+void VtkViewport::setAnnotationHiddenIndicatorVisible(const bool visible)
+{
+    if(impl_->annotationHiddenIndicator == nullptr)
+    {
+        return;
+    }
+    impl_->annotationHiddenIndicator->setVisible(visible);
+    if(visible)
+    {
+        updateAnnotationHiddenIndicatorPosition();
+        impl_->annotationHiddenIndicator->raise();
+    }
+}
+
 void VtkViewport::annotationDataModified(const std::size_t index)
 {
     if(index >= impl_->annotations.size())
@@ -923,6 +1037,10 @@ void VtkViewport::clearInput()
     impl_->measurementEndPhysical.reset();
     impl_->measurementRulerActor->SetVisibility(false);
     impl_->measurementLabelActor->SetVisibility(false);
+    if(impl_->annotationHiddenIndicator != nullptr)
+    {
+        impl_->annotationHiddenIndicator->hide();
+    }
     impl_->sliceCounterActor->SetVisibility(false);
     impl_->dragMode = DragMode::None;
     setPanGrabCursor(false);
@@ -1121,21 +1239,52 @@ void VtkViewport::setBrushLabel(const int label)
     {
         throw std::invalid_argument("Brush label must be from 1 to 65535");
     }
-    const std::uint32_t packed = core::defaultLabelColor(
-        static_cast<std::uint16_t>(label));
-    impl_->brushOutlineActor->GetProperty()->SetColor(
-        static_cast<double>((packed >> 16U) & 0xFFU) / 255.0,
-        static_cast<double>((packed >> 8U) & 0xFFU) / 255.0,
-        static_cast<double>(packed & 0xFFU) / 255.0);
+    impl_->brushLabel = label;
+    updateBrushOutlineAppearance();
     if(impl_->brushOutlineActor->GetVisibility())
     {
         impl_->renderWindow->Render();
     }
 }
 
+void VtkViewport::setEraseTargetLabel(const int label)
+{
+    if(label != -1 && (label < 1 || label > 65535))
+    {
+        throw std::invalid_argument(
+            "Erase target label must be All labels or a nonzero label");
+    }
+    impl_->eraseTargetLabel = label;
+    updateBrushOutlineAppearance();
+    if(impl_->brushOutlineActor->GetVisibility())
+    {
+        impl_->renderWindow->Render();
+    }
+}
+
+void VtkViewport::updateBrushOutlineAppearance()
+{
+    const bool erasing = impl_->interactionMode == InteractionMode::Erase;
+    const int colorLabel = erasing
+        ? impl_->eraseTargetLabel
+        : impl_->brushLabel;
+    const std::uint32_t packed = colorLabel > 0
+        ? core::defaultLabelColor(static_cast<std::uint16_t>(colorLabel))
+        : 0xFFFFFFU;
+    impl_->brushOutlineActor->GetProperty()->SetColor(
+        static_cast<double>((packed >> 16U) & 0xFFU) / 255.0,
+        static_cast<double>((packed >> 8U) & 0xFFU) / 255.0,
+        static_cast<double>(packed & 0xFFU) / 255.0);
+    if(impl_->inspectedPhysical)
+    {
+        updateBrushOutline(*impl_->inspectedPhysical);
+    }
+}
+
 void VtkViewport::setInteractionMode(const InteractionMode mode)
 {
     impl_->interactionMode = mode;
+    updateBrushOutlineAppearance();
     const bool editing = mode == InteractionMode::Brush
         || mode == InteractionMode::Erase
         || mode == InteractionMode::ScopedErase;
@@ -1650,13 +1799,12 @@ void VtkViewport::updateBrushOutline(
     }
     const auto continuous =
         impl_->imageGeometry->physicalToContinuousIndex(inspectedPhysical);
-    core::ImageGeometry::Vector centerIndex{};
     const auto& dimensions = impl_->imageGeometry->dimensions();
     for(std::size_t axis = 0; axis < 3; ++axis)
     {
-        centerIndex[axis] = std::round(continuous[axis]);
-        if(!std::isfinite(centerIndex[axis]) || centerIndex[axis] < 0.0
-           || centerIndex[axis] >= static_cast<double>(dimensions[axis]))
+        const double centerIndex = std::round(continuous[axis]);
+        if(!std::isfinite(centerIndex) || centerIndex < 0.0
+           || centerIndex >= static_cast<double>(dimensions[axis]))
         {
             impl_->brushOutlineActor->SetVisibility(false);
             return;
@@ -1668,9 +1816,26 @@ void VtkViewport::updateBrushOutline(
         impl_->brushCircular ? core::BrushShape::Circle
                              : core::BrushShape::Square);
     const auto outline = core::brushOutlinePoints(
-        footprint, *impl_->imageGeometry, slice, centerIndex);
+        footprint, slice, inspectedPhysical);
+    if(outline.empty())
+    {
+        impl_->brushOutlineActor->SetVisibility(false);
+        return;
+    }
     constexpr double overlayDepth = 0.3;
-    setClosedOutline(*impl_->brushOutline, outline, overlayDepth);
+    if(impl_->interactionMode == InteractionMode::Erase)
+    {
+        setDashedClosedOutline(
+            *impl_->brushOutline,
+            outline,
+            overlayDepth,
+            1.5 * slice.outputSpacing(),
+            slice.outputSpacing());
+    }
+    else
+    {
+        setClosedOutline(*impl_->brushOutline, outline, overlayDepth);
+    }
     impl_->brushOutlineActor->SetVisibility(true);
 }
 
@@ -1907,6 +2072,20 @@ void VtkViewport::updateCrosshair()
         gapLength);
 }
 
+void VtkViewport::updateAnnotationHiddenIndicatorPosition()
+{
+    if(impl_->annotationHiddenIndicator == nullptr)
+    {
+        return;
+    }
+    impl_->annotationHiddenIndicator->move(
+        std::max(
+            0,
+            impl_->widget->width() - impl_->annotationHiddenIndicator->width()
+                - annotationHiddenIndicatorMargin),
+        annotationHiddenIndicatorMargin);
+}
+
 void VtkViewport::updateZoomThumbnail()
 {
     const auto detachThumbnail = [this]() {
@@ -2036,6 +2215,10 @@ bool VtkViewport::eventFilter(QObject* const watched, QEvent* const event)
     if(event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease)
     {
         return true;
+    }
+    if(event->type() == QEvent::Resize)
+    {
+        updateAnnotationHiddenIndicatorPosition();
     }
     if(!impl_->sliceGeometry)
     {

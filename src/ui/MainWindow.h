@@ -152,6 +152,7 @@ private:
     void updateActiveLabelActions();
     void updateSaveAnnotationAction();
     void activateAnnotationDigit(int digit);
+    void activatePaintOverDigit(int digit);
     [[nodiscard]] bool ensureEditableAnnotationForShortcut();
     [[nodiscard]] bool canUseAnnotationDigitShortcuts() const;
     [[nodiscard]] std::shared_ptr<core::Annotation> selectedEditableAnnotation()

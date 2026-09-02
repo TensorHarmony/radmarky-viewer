@@ -875,6 +875,11 @@ void OrthogonalViewer::setAnnotationVisibility(
     }
 }
 
+void OrthogonalViewer::setAnnotationHiddenIndicatorVisible(const bool visible)
+{
+    impl_->panels[0].viewport->setAnnotationHiddenIndicatorVisible(visible);
+}
+
 void OrthogonalViewer::setOverallLabelOpacity(const double opacity)
 {
     impl_->overallLabelOpacity = std::clamp(opacity, 0.0, 1.0);
@@ -1125,6 +1130,11 @@ void OrthogonalViewer::setPaintOver(const int selection)
     else
     {
         throw std::invalid_argument("Paint-over selection is invalid");
+    }
+    const int eraseTarget = selection == 0 ? -1 : selection;
+    for(auto& panel : impl_->panels)
+    {
+        panel.viewport->setEraseTargetLabel(eraseTarget);
     }
 }
 
@@ -1412,6 +1422,48 @@ void OrthogonalViewer::saveScreenshot(const core::SliceOrientation orientation)
             this,
             tr("Unable to Save Screenshot"),
             tr("The slice screenshot could not be written to the selected file."));
+    }
+}
+
+void OrthogonalViewer::goToNearestAxialSliceContainingLabel(const int label)
+{
+    const auto& annotation = impl_->annotationEditor.annotation();
+    auto& axialPanel = impl_->panels[0];
+    if(!impl_->state || !annotation || label < 1 || label > 65535
+       || !axialPanel.geometry)
+    {
+        return;
+    }
+    const auto target = annotation->nearestAxialSlicePointContainingLabel(
+        static_cast<std::uint16_t>(label),
+        impl_->state->cursorPhysical());
+    if(!target)
+    {
+        return;
+    }
+
+    const auto& geometry = *axialPanel.geometry;
+    const double normalRange =
+        geometry.normalMaximum() - geometry.normalMinimum();
+    if(normalRange <= 0.0)
+    {
+        return;
+    }
+    const double fraction = std::clamp(
+        (geometry.normalCoordinate(*target) - geometry.normalMinimum())
+            / normalRange,
+        0.0,
+        1.0);
+    try
+    {
+        impl_->inspectionOrientation = core::SliceOrientation::Axial;
+        impl_->state->setCursorNormalFraction(geometry, fraction);
+        publishCursor();
+    }
+    catch(const std::exception& exception)
+    {
+        qWarning().noquote()
+            << "[RENDER] Label slice navigation failed:" << exception.what();
     }
 }
 

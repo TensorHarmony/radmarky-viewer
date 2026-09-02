@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -42,14 +43,19 @@ public:
     [[nodiscard]] const Volume& volume() const noexcept;
     [[nodiscard]] AnnotationKind kind() const noexcept;
     [[nodiscard]] std::vector<std::uint16_t> labelValues() const;
+    [[nodiscard]] std::optional<ImageGeometry::Vector>
+    nearestAxialSlicePointContainingLabel(
+        std::uint16_t label,
+        const ImageGeometry::Vector& currentPhysical) const;
     [[nodiscard]] double opacity() const noexcept;
     void setOpacity(double opacity);
     [[nodiscard]] bool isVisible() const noexcept;
     void setVisible(bool visible) noexcept;
 
-    // Label maps are voxel-indexed annotations. If their dimensions match,
-    // use the anatomical image header. Scalar maps retain their physical header
-    // and must already match the anatomical image.
+    // Label maps are voxel-indexed annotations. Apply the anatomical header and,
+    // for oblique 3-D acquisitions, resample once to the patient-axial editing
+    // grid so each stored voxel belongs to one displayed axial slice. Scalar
+    // maps retain their physical header and must match the anatomical image.
     void conformGeometry(const ImageGeometry& primaryGeometry);
     void verifyGeometry(const ImageGeometry& primaryGeometry) const;
 

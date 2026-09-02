@@ -66,15 +66,17 @@ bool BrushFootprint::contains(const int dx, const int dy) const noexcept
 
 std::vector<BrushOutlinePoint> brushOutlinePoints(
     const BrushFootprint& footprint,
-    const ImageGeometry& geometry,
     const OrthogonalSliceGeometry& slice,
-    const ImageGeometry::Vector& centerIndex)
+    const ImageGeometry::Vector& centerPhysical)
 {
+    const auto gridCenter = brushGridIndex(slice, centerPhysical);
+    if(!gridCenter)
+    {
+        return {};
+    }
     const auto project = [&](const double dx, const double dy) {
-        auto index = centerIndex;
-        index[0] += dx;
-        index[1] += dy;
-        const auto physical = geometry.indexToPhysical(index);
+        const auto physical = brushPointOnSliceGrid(
+            slice, *gridCenter, centerPhysical, dx, dy);
         return BrushOutlinePoint{{
             slice.horizontalCoordinate(physical),
             slice.verticalCoordinate(physical),
@@ -108,6 +110,49 @@ std::vector<BrushOutlinePoint> brushOutlinePoints(
             center + radius * std::sin(angle)));
     }
     return points;
+}
+
+std::optional<BrushGridIndex> brushGridIndex(
+    const OrthogonalSliceGeometry& slice,
+    const ImageGeometry::Vector& physicalPoint)
+{
+    const double spacing = slice.outputSpacing();
+    const double horizontal =
+        (slice.horizontalCoordinate(physicalPoint) - slice.horizontalMinimum())
+        / spacing;
+    const double vertical =
+        (slice.verticalCoordinate(physicalPoint) - slice.verticalMinimum())
+        / spacing;
+    if(!std::isfinite(horizontal) || !std::isfinite(vertical))
+    {
+        return std::nullopt;
+    }
+    const BrushGridIndex result{{
+        std::lround(horizontal),
+        std::lround(vertical),
+    }};
+    if(result[0] < 0 || result[1] < 0
+       || result[0] >= static_cast<long>(slice.width())
+       || result[1] >= static_cast<long>(slice.height()))
+    {
+        return std::nullopt;
+    }
+    return result;
+}
+
+ImageGeometry::Vector brushPointOnSliceGrid(
+    const OrthogonalSliceGeometry& slice,
+    const BrushGridIndex& center,
+    const ImageGeometry::Vector& planePoint,
+    const double horizontalOffset,
+    const double verticalOffset)
+{
+    const double spacing = slice.outputSpacing();
+    const double horizontal = slice.horizontalMinimum()
+        + (static_cast<double>(center[0]) + horizontalOffset) * spacing;
+    const double vertical = slice.verticalMinimum()
+        + (static_cast<double>(center[1]) + verticalOffset) * spacing;
+    return slice.pointOnCursorPlane(horizontal, vertical, planePoint);
 }
 
 } // namespace radmarky::core

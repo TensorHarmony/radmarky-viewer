@@ -86,7 +86,11 @@ ShortcutsDialog::ShortcutsDialog(QWidget* const parent)
         ShortcutRow{tr("Keyboard"), tr("1–9"), tr("Annotation editing"),
                     tr("Choose a label and activate the brush")},
         ShortcutRow{tr("Keyboard"), tr("0"), tr("Annotation editing"),
-                    tr("Activate the eraser")},
+                    tr("Activate the eraser; press again to erase all labels")},
+        ShortcutRow{tr("Keyboard"), tr("Shift+0–9"),
+                    tr("Annotation editing"),
+                    tr("Choose a paint-over label without changing tools; "
+                       "labels 1–9 jump to their nearest axial slice")},
         ShortcutRow{tr("Keyboard"), tr("[ / ]"), tr("Annotation editing"),
                     tr("Decrease or increase the brush size")},
         ShortcutRow{tr("Keyboard"), tr("H"), tr("Viewer"),

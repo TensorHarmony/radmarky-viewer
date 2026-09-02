@@ -169,7 +169,10 @@ QStackedWidget#centralStack[dragActive="true"] { border: 3px solid %13; }
 QLabel#recentImagesTitle { color: %5; font-size: 22px; font-weight: 600; padding: 6px; }
 QLabel#recentImagesHint { color: %6; font-size: 12px; padding: 0 6px 8px 6px; }
 QTreeWidget#recentImagesList { background: %17; alternate-background-color: %17; color: %5; border: 1px solid %7; border-radius: 8px; padding: 0; }
+QTreeWidget#recentImagesList QHeaderView { background: transparent; border: 0; }
 QTreeWidget#recentImagesList QHeaderView::section { background: %18; color: %5; border: 0; border-right: 1px solid %7; border-bottom: 1px solid %7; padding: 5px 8px; font-weight: 600; }
+QTreeWidget#recentImagesList QHeaderView::section:first { border-top-left-radius: 7px; }
+QTreeWidget#recentImagesList QHeaderView::section:last { border-top-right-radius: 7px; border-right: 0; }
 QTreeWidget#recentImagesList::item { border: 0; border-bottom: 1px solid %7; padding: 6px; }
 QTreeWidget#recentImagesList::item:hover { background: %9; color: %14; }
 QTreeWidget#recentImagesList::item:selected { background: %10; color: %5; }

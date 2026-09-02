@@ -40,6 +40,7 @@ public:
     void removeAnnotation(std::size_t index);
     void setAnnotationOpacity(std::size_t index, double opacity);
     void setAnnotationVisibility(std::size_t index, bool visible);
+    void setAnnotationHiddenIndicatorVisible(bool visible);
     void setOverallLabelOpacity(double opacity);
     void setAnnotationSelection(
         const std::vector<std::size_t>& selectedIndices);
@@ -73,6 +74,7 @@ public:
     // Navigates to a one-based index along the volume's third dimension, which
     // is the slice numbering used by Python validators.
     void goToAxialSlice(int sliceNumber);
+    void goToNearestAxialSliceContainingLabel(int label);
     void setWindowLevel(double window, double level);
     void applyAutomaticWindowLevel();
     void applyWindowLevelPreset(int preset);

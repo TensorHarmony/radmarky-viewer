@@ -147,7 +147,7 @@ int main(int argc, char* argv[])
                 && settings.brushRadius(8) == 1,
             "per-label and eraser brush sizes round trip");
         passed &= expect(
-            settings.paintOverSelection(0) == 0
+            settings.paintOverSelection(0) == -1
                 && settings.paintOverSelection(1) == -1
                 && settings.paintOverSelection(7) == 3
                 && settings.paintOverSelection(8) == -1,

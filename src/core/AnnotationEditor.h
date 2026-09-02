@@ -50,6 +50,12 @@ public:
     [[nodiscard]] bool redo();
 
 private:
+    struct StampCenter
+    {
+        BrushGridIndex grid{};
+        double normalCoordinate = 0.0;
+    };
+
     struct Change
     {
         std::size_t offset = 0;
@@ -60,6 +66,7 @@ private:
 
     [[nodiscard]] bool apply(const Stroke& stroke, bool forward);
     std::shared_ptr<Annotation> annotation_;
+    std::optional<OrthogonalSliceGeometry> sliceGeometry_;
     std::uint16_t activeLabel_ = 1;
     int brushRadius_ = 1;
     BrushShape brushShape_ = BrushShape::Square;
@@ -67,7 +74,7 @@ private:
     std::uint16_t paintOverLabel_ = 0;
     bool strokeActive_ = false;
     bool erase_ = false;
-    std::optional<std::array<long, 3>> previousStampCenter_;
+    std::optional<StampCenter> previousStampCenter_;
     Stroke pending_;
     std::unordered_map<std::size_t, std::size_t> pendingLookup_;
     std::vector<Stroke> undoStack_;

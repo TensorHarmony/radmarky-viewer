@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <iostream>
 #include <memory>
+#include <set>
 #include <vector>
 
 namespace
@@ -52,6 +53,34 @@ std::shared_ptr<radmarky::core::Annotation> makeComponentAnnotation()
         std::make_shared<radmarky::core::Volume>(image),
         radmarky::core::AnnotationKind::LabelMap);
 }
+
+std::shared_ptr<radmarky::core::Volume> makeObliquePrimary()
+{
+    auto image = Image::New();
+    Image::SizeType size{{80, 40, 12}};
+    Image::RegionType region;
+    region.SetSize(size);
+    image->SetRegions(region);
+    Image::SpacingType spacing;
+    spacing[0] = 0.75037147102526;
+    spacing[1] = 0.75;
+    spacing[2] = 3.0;
+    image->SetSpacing(spacing);
+    Image::DirectionType direction;
+    direction[0][0] = 0.98837311854895;
+    direction[1][0] = 0.13792519723899;
+    direction[2][0] = -0.063993894212;
+    direction[0][1] = -0.1380375404341;
+    direction[1][1] = 0.9904233614745;
+    direction[2][1] = 0.002683742997;
+    direction[0][2] = 0.063751204;
+    direction[1][2] = 0.006181020;
+    direction[2][2] = 0.997946681;
+    image->SetDirection(direction);
+    image->Allocate();
+    image->FillBuffer(0.0F);
+    return std::make_shared<radmarky::core::Volume>(image);
+}
 }
 
 int main()
@@ -92,7 +121,7 @@ int main()
                         const bool expected = z == 1
                             && expectedFootprint.contains(
                                 static_cast<int>(x - 3),
-                                static_cast<int>(y - 3));
+                                static_cast<int>(3 - y));
                         passed &=
                             (footprintImage.GetPixel(
                                  Image::IndexType{{x, y, z}})
@@ -174,6 +203,84 @@ int main()
     {
         passed &= continuousImage.GetPixel(Image::IndexType{{x, 1, 1}}) == 0.0F;
     }
+
+    const auto obliquePrimary = makeObliquePrimary();
+    auto obliqueLabels = radmarky::core::Annotation::createBlankLabelMap(
+        "oblique.nii.gz", *obliquePrimary);
+    AnnotationEditor obliqueEditor;
+    obliqueEditor.setAnnotation(obliqueLabels);
+    obliqueEditor.setActiveLabel(6);
+    const auto& obliqueGeometry = obliqueLabels->volume().geometry();
+    const auto obliqueSlice =
+        radmarky::core::OrthogonalSliceGeometry::fromImageGeometry(
+            obliqueGeometry, radmarky::core::SliceOrientation::Axial);
+    const auto obliqueCenterPhysical =
+        obliquePrimary->geometry().indexToPhysical({{40.0, 20.0, 6.0}});
+    const auto obliqueCenter = radmarky::core::brushGridIndex(
+        obliqueSlice, obliqueCenterPhysical);
+    passed &= obliqueCenter.has_value();
+    if(obliqueCenter)
+    {
+        const auto strokeStart = radmarky::core::brushPointOnSliceGrid(
+            obliqueSlice, *obliqueCenter, obliqueCenterPhysical, -34.0, 0.0);
+        const auto strokeEnd = radmarky::core::brushPointOnSliceGrid(
+            obliqueSlice, *obliqueCenter, obliqueCenterPhysical, 34.0, 0.0);
+        obliqueEditor.beginStroke(false);
+        passed &= obliqueEditor.stamp(strokeStart);
+        passed &= obliqueEditor.stamp(strokeEnd);
+        passed &= obliqueEditor.endStroke();
+    }
+    const auto& obliqueImage = obliqueLabels->volume().image();
+    const auto& obliqueDimensions = obliqueGeometry.dimensions();
+    std::size_t obliquePaintedCount = 0;
+    std::set<long> obliquePaintedSlices;
+    for(long z = 0; z < static_cast<long>(obliqueDimensions[2]); ++z)
+    {
+        for(long y = 0; y < static_cast<long>(obliqueDimensions[1]); ++y)
+        {
+            for(long x = 0; x < static_cast<long>(obliqueDimensions[0]); ++x)
+            {
+                if(obliqueImage.GetPixel(Image::IndexType{{x, y, z}}) == 6.0F)
+                {
+                    ++obliquePaintedCount;
+                    obliquePaintedSlices.insert(z);
+                }
+            }
+        }
+    }
+    passed &= obliquePaintedCount > 55;
+    passed &= obliquePaintedSlices.size() == 1;
+    std::size_t currentPlanePaintedCount = 0;
+    std::size_t adjacentPlanePaintedCount = 0;
+    auto previousPlane = obliqueCenterPhysical;
+    auto nextPlane = obliqueCenterPhysical;
+    for(std::size_t axis = 0; axis < 3; ++axis)
+    {
+        const double step = obliqueSlice.normalDirectionLps()[axis]
+            * obliqueSlice.sliceStep();
+        previousPlane[axis] -= step;
+        nextPlane[axis] += step;
+    }
+    if(obliqueCenter)
+    {
+        for(long horizontal = -34; horizontal <= 34; ++horizontal)
+        {
+            const auto paintedAt = [&](const auto& planePoint) {
+                const auto point = radmarky::core::brushPointOnSliceGrid(
+                    obliqueSlice, *obliqueCenter, planePoint,
+                    static_cast<double>(horizontal), 0.0);
+                const auto sample =
+                    obliqueLabels->volume().sampleNearestPhysical(point);
+                return sample && sample->value == 6.0F;
+            };
+            currentPlanePaintedCount += paintedAt(obliqueCenterPhysical);
+            adjacentPlanePaintedCount += paintedAt(previousPlane);
+            adjacentPlanePaintedCount += paintedAt(nextPlane);
+        }
+    }
+    passed &= currentPlanePaintedCount > 55;
+    passed &= adjacentPlanePaintedCount == 0;
+    passed &= obliqueEditor.undo();
 
     editor.beginStroke(true);
     passed &= editor.stamp({{3.0, 3.0, 1.0}});

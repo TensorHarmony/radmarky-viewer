@@ -54,6 +54,7 @@ public:
     void removeAnnotation(std::size_t index);
     void setAnnotationOpacity(std::size_t index, double opacity);
     void setAnnotationVisibility(std::size_t index, bool visible);
+    void setAnnotationHiddenIndicatorVisible(bool visible);
     void annotationDataModified(std::size_t index);
     void setAnnotationComparison(vtkImageData* imageData, double opacity);
     void clearAnnotationComparison();
@@ -68,6 +69,7 @@ public:
     void setBrushRadius(int radius);
     void setBrushShape(bool circular);
     void setBrushLabel(int label);
+    void setEraseTargetLabel(int label);
     void setInteractionMode(InteractionMode mode);
     void zoomIn();
     void zoomOut();
@@ -114,6 +116,8 @@ private:
         const core::ImageGeometry::Vector& inspectedPhysical);
     void updateBrushOutline(
         const core::ImageGeometry::Vector& inspectedPhysical);
+    void updateBrushOutlineAppearance();
+    void updateAnnotationHiddenIndicatorPosition();
     void updateZoomThumbnail();
     void hideSamplingBoundary();
     void zoomBy(double factor);

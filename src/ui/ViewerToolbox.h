@@ -69,6 +69,7 @@ public:
     [[nodiscard]] int activeLabel() const;
     void setBrushRadii(const std::map<int, int>& radii);
     void setPaintOverSelections(const std::map<int, int>& selections);
+    [[nodiscard]] bool setPaintOverSelection(int selection);
     void adjustBrushRadius(int delta);
     void setAnnotationEditingState(
         bool editable, bool canUndo, bool canRedo);
@@ -105,6 +106,7 @@ signals:
 
 private:
     void updateAnnotationEmptyState();
+    void rebuildPaintOverOptions();
     void applyPaintOverForActiveLabel();
 
     QLineEdit* cursorX_ = nullptr;
@@ -146,6 +148,7 @@ private:
     QWidget* controlsPage_ = nullptr;
     std::map<int, int> brushRadii_;
     std::map<int, int> paintOverSelections_;
+    QList<int> annotationLabels_;
     std::vector<app::WindowLevelSetting> namedPresets_;
 };
 

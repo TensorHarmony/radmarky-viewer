@@ -221,12 +221,15 @@ void UserSettings::setPaintOverSelection(
     {
         return;
     }
+    const int normalizedSelection = label == 0 && selection == 0
+        ? -1 : selection;
     const auto found = paintOverSelections_.find(label);
-    if(found != paintOverSelections_.end() && found->second == selection)
+    if(found != paintOverSelections_.end()
+       && found->second == normalizedSelection)
     {
         return;
     }
-    paintOverSelections_[label] = selection;
+    paintOverSelections_[label] = normalizedSelection;
     save();
 }
 
@@ -397,7 +400,8 @@ void UserSettings::load()
            && value.value().isDouble()
            && selection >= -1 && selection <= maximumLabel)
         {
-            paintOverSelections_[label] = selection;
+            paintOverSelections_[label] = label == 0 && selection == 0
+                ? -1 : selection;
         }
     }
 

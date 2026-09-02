@@ -177,6 +177,23 @@ int main()
             static_cast<double>(x),
             "annotation comparison class");
     }
+    auto differentGridImage = Image::New();
+    Image::RegionType differentGridRegion;
+    differentGridRegion.SetSize({{8, 9, 11}});
+    differentGridImage->SetRegions(differentGridRegion);
+    differentGridImage->CopyInformation(image);
+    differentGridImage->Allocate();
+    differentGridImage->FillBuffer(0.0F);
+    differentGridImage->SetPixel({{1, 0, 0}}, 3.0F);
+    const radmarky::core::Volume differentGridComparison(differentGridImage);
+    const auto physicalComparison =
+        radmarky::rendering::ItkVtkImageBridge::copyComparisonToVtk(
+            firstComparison, differentGridComparison);
+    passed &= expectNear(
+        physicalComparison->GetScalarComponentAsDouble(1, 0, 0, 0),
+        static_cast<double>(
+            radmarky::rendering::ItkVtkImageBridge::ComparisonClass::DifferentValues),
+        "different-grid annotation comparison uses physical sampling");
 
     for(const auto orientation : orientations)
     {
