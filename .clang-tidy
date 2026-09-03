@@ -1,6 +1,7 @@
 ---
 # High-signal checks for RadMarky Viewer. Style-only and third-party noise is
 # left out so new defects stay visible. Run via tools/run-clang-tidy.ps1.
+# Pimpl + std::optional guards are not tracked through unique_ptr members.
 Checks: >
   -*,
   clang-analyzer-core*,
@@ -13,7 +14,6 @@ Checks: >
   -bugprone-easily-swappable-parameters,
   -bugprone-implicit-widening-of-multiplication-result,
   -bugprone-narrowing-conversions,
-  # Pimpl + std::optional guards are not tracked through unique_ptr members.
   -bugprone-unchecked-optional-access,
   performance-*,
   -performance-avoid-endl,

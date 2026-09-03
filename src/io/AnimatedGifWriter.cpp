@@ -169,7 +169,8 @@ bool AnimatedGifWriter::writeFrame(
     {
         const auto value = static_cast<GifByteType>(
             level * 255 / (grayscaleLevels - 1));
-        palette[static_cast<std::size_t>(colorCubeSize + level)] = {
+        palette[static_cast<std::size_t>(colorCubeSize)
+                + static_cast<std::size_t>(level)] = {
             value, value, value};
     }
 
@@ -178,7 +179,7 @@ bool AnimatedGifWriter::writeFrame(
         const auto* const scanLine = rgb.constScanLine(y);
         for(int x = 0; x < impl_->width; ++x)
         {
-            const auto source = static_cast<std::size_t>(x * 3);
+            const auto source = static_cast<std::size_t>(x) * 3U;
             const auto target = static_cast<std::size_t>(y) * impl_->width + x;
             const int red = scanLine[source];
             const int green = scanLine[source + 1];

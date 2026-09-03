@@ -1601,8 +1601,10 @@ void OrthogonalViewer::exportSliceAnimation()
     const int currentPosition = panel->sliceScrollBar->value();
     const int firstPosition = currentPosition - dialog.slicesBefore();
     const int lastPosition = currentPosition + dialog.slicesAfter();
-    positions.reserve(static_cast<std::size_t>(
-        (lastPosition - firstPosition + 1) * (dialog.pingPong() ? 2 : 1)));
+    const auto positionCount =
+        static_cast<std::size_t>(dialog.slicesBefore())
+        + static_cast<std::size_t>(dialog.slicesAfter()) + 1U;
+    positions.reserve(positionCount * (dialog.pingPong() ? 2U : 1U));
     for(int position = firstPosition; position <= lastPosition; ++position)
     {
         positions.push_back(position);
@@ -1906,7 +1908,7 @@ void OrthogonalViewer::applySliceAlignment(
         auto slice = core::OrthogonalSliceGeometry::fromImageGeometry(
             geometry, panel.orientation, alignment);
         panel.viewport->setSliceAlignment(alignment);
-        panel.geometry = std::move(slice);
+        panel.geometry = slice;
 
         const double intervals = std::round(
             (panel.geometry->normalMaximum()

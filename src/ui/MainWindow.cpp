@@ -2661,6 +2661,7 @@ void MainWindow::startDicomImport(
     updateImportProgress(20, tr("Reading DICOM metadata…"));
     const auto importGeneration = importGeneration_;
     const auto scanExtractionDirectory = extractionDirectory;
+    // QObject parent ownership is not modeled by the static analyzer.
     auto* const scanWatcher =
         new QFutureWatcher<DicomScanOutcome>(this);
     connect(
@@ -2855,6 +2856,9 @@ void MainWindow::startDicomImport(
                         try
                         {
                             const auto progress =
+                                // QPointer's reference-count implementation triggers a
+                                // false use-after-free report in the static analyzer.
+                                // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDelete)
                                 [window, count, importGeneration](
                                     const double fraction) {
                                 if(window.isNull())
@@ -2942,7 +2946,7 @@ void MainWindow::startDicomImport(
             }
             return outcome;
         }));
-}
+} // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 
 void MainWindow::displayVolume(
     std::shared_ptr<core::Volume> volume,

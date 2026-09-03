@@ -17,9 +17,9 @@ ViewerState::ViewerState(ImageGeometry geometry)
     // midpoint lies halfway between two voxels and an integer scrollbar step
     // can then appear to repeat the initially displayed slice number.
     const Vector centerIndex{{
-        static_cast<double>(dimensions[0] / 2),
-        static_cast<double>(dimensions[1] / 2),
-        static_cast<double>(dimensions[2] / 2),
+        std::floor(static_cast<double>(dimensions[0]) / 2.0),
+        std::floor(static_cast<double>(dimensions[1]) / 2.0),
+        std::floor(static_cast<double>(dimensions[2]) / 2.0),
     }};
     cursorPhysical_ = geometry_.indexToPhysical(centerIndex);
 }

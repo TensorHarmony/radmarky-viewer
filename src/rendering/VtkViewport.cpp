@@ -828,7 +828,7 @@ void VtkViewport::setSliceAlignment(const core::SliceAlignment alignment)
         impl_->annotationComparison->reslice->SetInterpolationModeToNearestNeighbor();
     }
 
-    impl_->sliceGeometry = std::move(slice);
+    impl_->sliceGeometry = slice;
     impl_->alignment = alignment;
     impl_->measurementStartPhysical.reset();
     impl_->measurementEndPhysical.reset();

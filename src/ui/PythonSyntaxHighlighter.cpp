@@ -367,7 +367,6 @@ void PythonSyntaxHighlighter::highlightBlock(const QString& text)
         }
         setFormat(0, closed, stringFormat_);
         index = closed;
-        state = StateNormal;
     }
 
     bool pendingFunction = false;

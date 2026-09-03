@@ -187,6 +187,7 @@ function Get-CompileArguments {
         '-DUNICODE'
         '-D_UNICODE'
         '-D_ENABLE_EXTENDED_ALIGNED_STORAGE'
+        '-D_CRT_USE_BUILTIN_OFFSETOF'
         '-DITK_IMAGEIO_FACTORY_REGISTER_MANAGER'
         '-DQT_CORE_LIB'
         '-DQT_CONCURRENT_LIB'

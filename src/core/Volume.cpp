@@ -254,7 +254,9 @@ std::optional<Volume::IntensityStatistics> Volume::sampleStatisticsPhysical(
     const double verticalStep =
         geometry_.physicalStepForOneVoxel(vertical);
     std::vector<double> values;
-    values.reserve(static_cast<std::size_t>(sideLength * sideLength));
+    values.reserve(
+        static_cast<std::size_t>(sideLength)
+        * static_cast<std::size_t>(sideLength));
     for(int row = 0; row < sideLength; ++row)
     {
         for(int column = 0; column < sideLength; ++column)
